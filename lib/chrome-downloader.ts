@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { getChromeAssetPattern } from "./paths";
 import { calculateChecksum, displayProgress, formatError } from "./utils";
 import { extractArchive, findWidevineInExtracted } from "./extractor";
@@ -120,33 +121,37 @@ async function downloadFile(
   }
 
   const reader = response.body!.getReader();
-  const chunks: Uint8Array[] = [];
+  const writer = Bun.file(destPath).writer();
   let downloaded = 0;
 
   displayProgress({ downloaded, total: contentLength, percentage: 0 });
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    chunks.push(value);
-    downloaded += value.length;
-    const percentage = Math.min(
-      100,
-      Math.round((downloaded / contentLength) * 100)
+      writer.write(value);
+      downloaded += value.length;
+      const percentage = Math.min(
+        100,
+        Math.round((downloaded / contentLength) * 100)
+      );
+      displayProgress({ downloaded, total: contentLength, percentage });
+    }
+  } finally {
+    await writer.end();
+    process.stdout.write("\n");
+  }
+
+  if (downloaded !== contentLength) {
+    throw new Error(
+      formatError("Chrome download was incomplete", {
+        downloaded,
+        expected: contentLength,
+      })
     );
-    displayProgress({ downloaded, total: contentLength, percentage });
   }
-
-  process.stdout.write("\n");
-
-  const buffer = new Uint8Array(downloaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    buffer.set(chunk, offset);
-    offset += chunk.length;
-  }
-  await Bun.write(destPath, buffer);
 }
 
 export async function downloadAndExtractChrome(
@@ -166,7 +171,7 @@ export async function downloadAndExtractChrome(
 
   const asset = findMatchingAsset(release);
 
-  const tempDir = join(process.env.TEMP || "/tmp", "helium-drm-download");
+  const tempDir = join(tmpdir(), "helium-drm-download");
   await mkdir(tempDir, { recursive: true });
 
   const exePath = join(tempDir, asset.name);
