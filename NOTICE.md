@@ -61,7 +61,7 @@ The **Widevine Content Decryption Module (CDM)** is proprietary software owned b
 What the tool does:
 
 - **Copies** a Widevine CDM that already exists on the user's own computer (installed there by Chrome, Edge, Firefox, Spotify or another program the user installed) into the user's own Helium installation.
-- **Downloads** Google Chrome only when no Widevine exists on the computer. On Windows it uses a public mirror of Google's official offline installer; on Linux, Google's official package from `dl.google.com`. The tool then takes Widevine from that download, on the user's machine.
+- **Downloads** Widevine only when no copy exists on the computer (or when the user asks with `--latest` / `--force-download`). It downloads directly from Google's own component update servers, the same service Chrome, Edge and Brave use to install Widevine. Mozilla's update server, which points at the same Google packages, is the backup. As a last resort it downloads Google Chrome (on Windows through a public mirror of Google's official offline installer; on Linux, Google's package from `dl.google.com`) and takes Widevine from it. Every download goes straight from those servers to the user's own machine; this project never hosts or relays Widevine.
 
 Use of Widevine remains subject to Google's terms, and use of streaming services remains subject to each service's terms. You are responsible for using this tool in line with the terms and laws that apply to you.
 

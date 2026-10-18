@@ -4,7 +4,7 @@
 
 **Make DRM-protected video play in the [Helium browser](https://helium.is/) — with one line, on Windows and Linux.**
 
-It finds Widevine in the browsers and apps you already have, installs it into Helium in exactly the layout Helium expects, and reopens Helium with your tabs. No paths to type, no files to copy by hand.
+It finds Widevine in the browsers and apps you already have (or downloads just Widevine from Google, ~20 MB), installs it into Helium in exactly the layout Helium expects, **proves it works by asking Helium itself**, and reopens Helium with your tabs. No paths to type, no files to copy by hand.
 
 [![Latest release](https://img.shields.io/github/v/release/OctavianAdv/helium-drm-fixer?label=release&color=2ea44f)](https://github.com/OctavianAdv/helium-drm-fixer/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/OctavianAdv/helium-drm-fixer/total?color=blue)](https://github.com/OctavianAdv/helium-drm-fixer/releases)
@@ -30,22 +30,32 @@ irm https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.
 curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.sh | bash
 ```
 
-That's it. When it says **✅ Done**, DRM works in Helium.
+**Scoop** (Windows), to keep it installed:
+
+```powershell
+scoop install https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/packaging/scoop/helium-drm-fixer.json
+```
+
+That's it. When it says **✅ Done**, DRM works in Helium, and the tool has already checked that inside Helium.
 
 What you'll see:
 
 ```text
 🔧 Fixing Helium DRM...
 
-✔ Using Widevine 4.10.3112.0 from Google Chrome (2 other copies found)
-✔ Found Helium at: C:\Users\you\AppData\Local\imput\Helium\Application\143.0.7499.170
+✔ Found Helium 0.19.4.1 (x64): C:\Users\you\AppData\Local\imput\Helium\Application\143.0.7499.170
+✔ Using Widevine 4.10.3112.0 from Google Chrome
 
 Helium is open. Close it now to apply the fix? It will reopen afterwards. [Y/n] y
 ✔ Closed Helium
-✔ WidevineCdm copied successfully!
+✔ Installed Widevine 4.10.3112.0 from Google Chrome
+✔ Verified: Helium confirms Widevine DRM is available
+  Helium has been reopened.
 
-✅ Done! Helium has been reopened with DRM enabled.
+✅ Done! DRM is enabled in Helium.
 ```
+
+Want it to stay fixed after Helium updates? Run it once with `--auto` (Windows).
 
 ---
 
@@ -95,17 +105,23 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 | One-line install, nothing left behind | ❌ | Rarely | ✅ `irm … \| iex` / `curl … \| bash` |
 | Download is verified (SHA-256) | – | Rarely | ✅ **Every run** |
 | Finds Helium without you typing a path | ❌ | Fixed paths only | ✅ **Installer, registry, running window, portable zip, AppImage** |
-| Gets Widevine from more than just Chrome | ❌ | Chrome only | ✅ **25+ browsers and apps, incl. Firefox and Spotify** |
+| Gets Widevine from more than just Chrome | ❌ | Chrome only | ✅ **28 browsers and apps, incl. Brave, Edge, Firefox and Spotify** |
+| Downloads **only Widevine** when needed | ❌ | Whole Chrome (~500 MB) | ✅ **~20 MB straight from Google, with Mozilla and Chrome as fallbacks** |
+| **Proves** DRM works afterwards | ❌ | ❌ | ✅ **Asks Helium itself, invisibly, in about a second** |
+| Stays fixed after Helium updates | ❌ | ❌ | ✅ **`--auto` re-applies it in the background (Windows); Linux never loses it** |
+| ARM64 support | – | Rarely | ✅ **Windows and Linux ARM64, matched to Helium's own CPU** |
+| Status, undo, fix every copy | ❌ | ❌ | ✅ `--status`, `--undo`, `--all` |
+| Package managers | – | – | ✅ **Scoop today; winget and AUR manifests ready** |
 | Picks the **newest** Widevine you have | ❌ | ❌ | ✅ |
 | Rejects broken or wrong-CPU copies | ❌ | ❌ | ✅ **Checks the manifest, the library and its CPU type** |
 | Converts Firefox's Widevine for Helium | ❌ | ❌ | ✅ |
-| Works without Chrome installed | ❌ | ❌ | ✅ **Uses another browser, or downloads Chrome just for Widevine** |
+| Works without Chrome installed | ❌ | ❌ | ✅ **Uses another browser, or downloads just Widevine** |
 | Closes and reopens Helium safely | ❌ | ❌ | ✅ **Asks first, saves your tabs, restores them** |
 | Clear message when files are locked | ❌ | ❌ | ✅ |
 | Correct Linux method (profile folder + hint file) | Easy to get wrong | Easy to get wrong | ✅ **Works with AppImage, tarball and distro packages** |
 | Safe with `sudo` on Linux | – | Can write to root's home | ✅ **Uses your home and gives the files back to you** |
 | Dry run and check modes | – | Rarely | ✅ `--dry-run`, `--check`, `--list-sources` |
-| Tested against a real Helium | – | Unknown | ✅ **[See results](#-tested-results)** |
+| Tested against a real Helium | – | Unknown | ✅ **[See results](#-tested-results)**, plus an automated weekly test |
 
 ---
 
@@ -115,18 +131,20 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 - **Finds Helium anywhere**:
   - Windows: per-user and all-users installs, the Windows registry, a Helium window that's open right now, and portable copies unpacked in Downloads, Desktop, Documents, your user folder or `C:\`.
   - Linux: `/opt/helium` (deb/rpm), AppImages, binaries on your `PATH`. If Helium was installed but never opened, it creates the profile folder for you.
-- **Finds Widevine anywhere.** It searches 25+ browsers and apps, including all release channels, Flatpak and Snap versions, Firefox and its forks, Spotify, and apps with a built-in browser such as OBS or Windows WebView2 apps.
+- **Finds Widevine anywhere.** It searches 28 browsers and apps, including all release channels, Flatpak and Snap versions, Firefox and its forks, Spotify, and apps with a built-in browser such as OBS or Windows WebView2 apps.
 - **Picks the best copy.** It reads the version of every copy it finds and uses the newest; Chrome wins a tie.
 - **Never installs a broken copy.** Each candidate must have a valid `manifest.json` with a version and the actual CDM library, built for your CPU. Browsers often leave empty `WidevineCdm` folders behind; those are skipped.
 - **Converts Firefox's Widevine.** Firefox, LibreWolf, Zen, Floorp and Waterfox store Widevine in a flat folder. The tool rebuilds it into Chromium's `_platform_specific/<os>_<cpu>/` layout and fills in any manifest fields Chromium needs.
 - **Handles a running Helium (Windows).** It asks before closing Helium, closes it the polite way so your session is saved, applies the fix, and reopens Helium with the same settings plus `--restore-last-session`. The reopened Helium is started by Windows itself, so it stays open after the terminal closes.
-- **Downloads only as a last resort.** If no browser or app on your computer has Widevine, it downloads Chrome just to take Widevine from it:
-  - Windows: an official uncompressed Chrome installer, unpacked with a 7-Zip bundled inside the fixer.
-  - Linux: Google's official `.deb`, unpacked without `dpkg`, so it works on any distro.
-
-  Downloads are cached and checksum-verified, so running the tool again is instant.
+- **Downloads just Widevine, only when needed.** If no browser or app on your computer has Widevine, it asks Google's component update server (the same one Chrome, Edge and Brave use) for the Widevine package: about 20 MB, verified by SHA-256. If Google can't be reached, it tries Mozilla's update server (Firefox's route). Only as a last resort does it download all of Chrome to take Widevine from it. Downloads are cached, so running again is instant. `--latest` also checks Google for a newer Widevine than your browsers have; `--offline` never downloads anything.
+- **Proves it works.** After installing, it starts Helium invisibly with a throw-away profile, opens a local page (no internet needed) and asks Helium whether Widevine is available, exactly like a streaming site would. It takes about a second, and your own Helium profile is never touched.
+- **Stays fixed (Windows).** `--auto` installs a hidden scheduled task (at logon and every hour, no admin rights needed) that re-applies the fix when a Helium update arrives. `--auto off` removes it completely. On Linux the fix lives in your profile and survives updates by itself.
+- **Matches Helium's CPU.** It reads whether Helium is x64 or ARM64 from Helium's own files and picks or downloads the matching Widevine, including on Windows on ARM and ARM64 Linux.
+- **Status, undo and multiple installs.** `--status` shows each Helium, its Widevine version and whether DRM works. `--undo` removes the fix cleanly. `--all` fixes every Helium it finds (installed and portable). Already up to date? It says so and doesn't touch Helium.
+- **Double-click friendly.** Started from Explorer, the window stays open until you press Enter, so you can read the result.
+- **Tells you about updates.** When a newer version of the fixer exists, it says so at the end (never when run through the always-latest one-liners).
 - **Friendly, honest errors.** Locked files, missing permissions, no Helium, no Widevine: each one gets a plain-language explanation of what to do next.
-- **Safe to explore.** `--check`, `--dry-run` and `--list-sources` never change anything.
+- **Safe to explore.** `--status`, `--check`, `--dry-run` and `--list-sources` never change anything.
 - **Single self-contained executable.** Built with [Bun](https://bun.sh/). No runtime, Node.js or Python to install.
 
 ---
@@ -185,14 +203,27 @@ Every source below was installed into a real **Helium 0.19.4.1** (portable, Wind
 | Windows WebView2 component | 4.10.3112.0 | ✅ **Widevine supported** |
 | Firefox (converted from its flat layout) | 4.10.3050.0 | ✅ **Widevine supported** |
 
+Downloaded copies, installed and verified the same way:
+
+| Download route | Version | Size | Helium result |
+| --- | --- | --- | --- |
+| Google component update server | 4.10.3112.0 | 23 MB (0.8 s) | ✅ **Widevine supported** |
+| Mozilla update server | 4.10.3050.0 | 22.7 MB | ✅ **Widevine supported** |
+
+Google's server also offers Widevine for Windows ARM64, Linux x64 and Linux ARM64 (checked), which is how ARM devices are covered.
+
 Also tested on Windows:
 
 - **Public one-liner** (`irm … | iex`) end to end.
+- **Verification both ways:** it reports "supported" with the fix and "Unsupported keySystem" without it.
+- **`--auto`:** task created without admin rights, window-less, and it re-installed Widevine after a simulated Helium update.
+- **`--all`:** two portable Heliums open at once; both found, closed, fixed, verified and reopened.
+- **`--status`, `--undo`, `--offline`, `--latest`, `--reinstall`**, and the double-click pause.
 - **Auto-detection** of a running portable Helium, with no paths given.
 - **Close → fix → reopen**, including a second run while Widevine was in use.
 - **Compiled `.exe` without `node_modules`**, including the Chrome download and 7-Zip extraction.
 
-On Linux, the download, `.deb` extraction and profile-folder logic run in simulation and in unit tests. Reports from real Linux machines are very welcome: [open an issue](https://github.com/OctavianAdv/helium-drm-fixer/issues).
+On Linux, the download, `.deb` extraction and profile-folder logic run in simulation and in unit tests. An automated end-to-end test (real Helium, fix, verify, undo) is set up to run on every change and weekly. Reports from real Linux machines are very welcome: [open an issue](https://github.com/OctavianAdv/helium-drm-fixer/issues).
 
 ---
 
@@ -220,7 +251,17 @@ curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/i
 Prefer to read a script before running it? It's short, and that's a good habit:
 [`install.ps1`](install.ps1) · [`install.sh`](install.sh).
 
-### Option 2: download the executable
+### Option 2: a package manager
+
+| | Command | Status |
+| --- | --- | --- |
+| **Scoop** (Windows) | `scoop install https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/packaging/scoop/helium-drm-fixer.json` | ✅ Available |
+| **winget** (Windows) | `winget install OctavianAdv.HeliumDrmFixer` | ⏳ Manifest ready, waiting for approval |
+| **AUR** (Arch Linux) | `yay -S helium-drm-fixer-bin` | ⏳ PKGBUILD ready, not published yet |
+
+Installed this way, the command is simply `fix-helium-drm`.
+
+### Option 3: download the executable
 
 Get the file for your system from the [latest release](https://github.com/OctavianAdv/helium-drm-fixer/releases/latest). The release also includes `SHA256SUMS.txt`, so you can verify the file yourself.
 
@@ -247,7 +288,7 @@ chmod +x fix-helium-drm-linux-x64
 
 No `sudo` needed: Helium's profile is in your home folder. (If you do use `sudo`, the tool still writes to *your* profile and hands the files back to you.)
 
-### Option 3: run from source
+### Option 4: run from source
 
 Requires [Bun](https://bun.sh/).
 
@@ -266,14 +307,23 @@ In the examples, `fix-helium-drm` stands for however you run the tool: the one-l
 
 | Option | What it does |
 | --- | --- |
+| *(none)* | Find Helium and Widevine, install, verify, done. |
+| `--status` | Show each Helium, its Widevine version, whether DRM works, available Widevine and auto-fix state. Changes nothing. |
 | `--check` | Find everything and report whether the fix can be applied. Changes nothing. |
 | `--dry-run` | Show which Widevine would be copied, and where. Changes nothing. |
 | `--list-sources` | List every Widevine copy on this computer, best first. Changes nothing. |
 | `--from <name>` | Use the copy from a specific browser or app, such as `edge`, `brave`, `firefox` or `spotify`. Matches part of the name. |
+| `--latest` | Also ask Google whether a newer Widevine exists than your browsers have, and use it if so. |
+| `--offline` | Never download anything; only use Widevine already on this computer. |
+| `--force-download` | Download Widevine from Google even if a local copy exists. |
 | `--chrome-path <path>` | Use the Widevine folder at this exact path. Chromium and Firefox layouts both work. |
 | `--helium-path <path>` | Use this Helium folder: the version folder or portable folder on Windows/macOS, the profile folder on Linux. |
+| `--all` | Fix every Helium found, e.g. both an installed and a portable copy. |
+| `--reinstall` | Copy Widevine again even if Helium already has that version. |
+| `--no-verify` | Skip the check inside Helium after installing. |
 | `-y`, `--yes` | Close and reopen Helium without asking (Windows). |
-| `--force-download` | Ignore local copies and download Chrome again, even if it is cached. |
+| `--undo` | Remove the fix from Helium. |
+| `--auto` / `--auto off` | Turn automatic re-fixing after Helium updates on or off (Windows). |
 | `--verbose`, `--debug` | Show every location checked and every decision made. |
 | `-V`, `--version` | Show the version. |
 | `-h`, `--help` | Show help. |
@@ -293,50 +343,77 @@ fix-helium-drm --helium-path "D:\Apps\helium_0.19.4.1_x64-windows"
 # Linux: a specific Widevine folder and profile
 fix-helium-drm --chrome-path /opt/google/chrome/WidevineCdm --helium-path ~/.config/net.imput.helium
 
+# Is DRM working right now?
+fix-helium-drm --status
+
+# Keep Helium fixed after every update (Windows)
+fix-helium-drm --auto
+
+# Fix both the installed and the portable Helium
+fix-helium-drm --all
+
+# Use the newest Widevine Google has, even if your browsers are behind
+fix-helium-drm --latest
+
+# Remove the fix
+fix-helium-drm --undo
+
 # Something's off? See every step
 fix-helium-drm --verbose
 ```
+
+**Exit codes** (for scripts): `0` done and verified · `1` something failed · `2` installed, but Helium couldn't confirm DRM works.
 
 ---
 
 ## 🔍 How it works
 
 ```text
- ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
- │ 1. Find Widevine     │──▶│ 2. Find Helium       │──▶│ 3. Close if needed   │──▶│ 4. Install & reopen  │
- │ 25+ browsers & apps  │   │ installer, registry, │   │ ask, close politely  │   │ right layout, right  │
- │ newest valid copy    │   │ running, portable,   │   │ (Windows file locks) │   │ folder, reopen with  │
- │ (download if none)   │   │ AppImage, profile    │   │                      │   │ your tabs            │
- └──────────────────────┘   └──────────────────────┘   └──────────────────────┘   └──────────────────────┘
+ ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
+ │ 1. Find Helium     │─▶│ 2. Find Widevine   │─▶│ 3. Close if needed │─▶│ 4. Install         │─▶│ 5. Verify & reopen │
+ │ installer, regis-  │  │ 28 browsers & apps │  │ ask, close politely│  │ right layout,      │  │ ask Helium itself, │
+ │ try, running, por- │  │ newest, right CPU  │  │ (Windows locks)    │  │ right folder       │  │ then reopen with   │
+ │ table, AppImage    │  │ else Google ~20 MB │  │                    │  │                    │  │ your tabs          │
+ └────────────────────┘  └────────────────────┘  └────────────────────┘  └────────────────────┘  └────────────────────┘
 ```
 
-1. **Find Widevine.** Every location in the [table above](#-where-it-gets-widevine-from) is checked.
-   - Each copy is validated: a manifest with a version, the CDM library for your OS (`widevinecdm.dll` or `libwidevinecdm.so`), and a CPU type that matches your system (read from the library's PE/ELF header).
-   - The newest valid copy wins.
-   - Apps with a built-in browser are searched when no browser has Widevine, or when you ask with `--list-sources` or `--from`.
-   - If nothing is found, Chrome is downloaded and Widevine is taken from it.
-2. **Find Helium.**
+1. **Find Helium.**
    - **Windows:** the folder holding Helium's `chrome.dll`. That's `…\imput\Helium\Application\<version>\` for the installer, or the unpacked folder for the portable zip. Helium's Windows program is also named `chrome.exe`, so the tool only accepts paths containing "helium" and never mistakes Google Chrome for Helium.
    - **Linux:** Helium's profile folder, `~/.config/net.imput.helium`. Chromium on Linux loads Widevine from here, so it works the same for every install type.
+   - Helium's CPU type (x64 or ARM64) is read from its own files (`chrome.dll` on Windows, the program file on Linux).
+2. **Find Widevine.** Every location in the [table above](#-where-it-gets-widevine-from) is checked.
+   - Each copy is validated: a manifest with a version, the CDM library for your OS (`widevinecdm.dll` or `libwidevinecdm.so`), and a CPU type that matches **Helium** (read from the library's PE/ELF header).
+   - The newest valid copy wins.
+   - Apps with a built-in browser are searched when no browser has Widevine, or when you ask with `--list-sources` or `--from`.
+   - If nothing is found, Widevine is downloaded: Google's component update server first (the Widevine package itself, verified by SHA-256), then Mozilla's update server (SHA-512), then a full Chrome download as the last resort. The package is a CRX3 file, which the tool unpacks with its own built-in ZIP reader, so nothing extra has to be installed.
 3. **Close Helium if needed (Windows).** Windows locks files that are in use. The tool asks, closes Helium gracefully (and only force-closes after 10 seconds), and remembers its exact command line.
 4. **Install.**
    - **Windows:** `WidevineCdm\` goes next to `chrome.dll`.
    - **Linux:** `WidevineCdm/<version>/` goes in the profile, with the `latest-component-updated-widevine-cdm` hint file Chromium reads at startup.
-   - Firefox copies are converted on the way. Then Helium is reopened.
+   - Firefox copies are converted on the way. If Helium already has the same or a newer Widevine, nothing is copied.
+5. **Verify and reopen.** Helium is started invisibly (`--headless`) with a throw-away profile and a tiny local web page on `127.0.0.1`. That address counts as a "secure context", so no internet is needed. Through the Chrome DevTools Protocol, the tool runs `navigator.requestMediaKeySystemAccess('com.widevine.alpha', …)` inside Helium (the same call streaming sites make) and reports the answer. Then your Helium is reopened with your tabs.
 
 ---
 
 ## 🔁 After a Helium update
 
-- **Windows (installer):** Helium installs each update into a new `Application\<version>\` folder, so the new version starts without Widevine. Just run the one-liner again; it takes a few seconds.
-- **Windows (portable):** if you unpack a new zip, run the tool again.
+- **Windows (installer):** Helium installs each update into a new `Application\<version>\` folder, so the new version starts without Widevine.
+  - **Best:** run the fixer once with `--auto`. A hidden scheduled task then checks at logon and every hour and re-applies the fix by itself; you'll just need to restart Helium once after an update. No admin rights, no console windows popping up. The log is in `%LOCALAPPDATA%\helium-drm-fixer\auto-fix.log`; `--auto off` removes everything.
+  - Or simply run the one-liner again; it takes a few seconds.
+- **Windows (portable):** if you unpack a new zip, run the tool again (or use `--auto`; it also finds a running portable Helium).
 - **Linux:** the fix lives in your Helium profile, so it **survives Helium updates**. Run the tool again only if you want a newer Widevine.
 
 ---
 
 ## ↩️ Undo the fix
 
-Delete the `WidevineCdm` folder the tool created, then restart Helium:
+```bash
+fix-helium-drm --undo          # add --all to undo every Helium
+```
+
+It closes Helium if needed (asking first), removes the `WidevineCdm` folder it added, and reopens Helium. If you also turned on auto-fix, run `fix-helium-drm --auto off`.
+
+Prefer to do it by hand? Delete this folder and restart Helium:
 
 | System | Folder to delete |
 | --- | --- |
@@ -350,11 +427,15 @@ Not sure where it went? `fix-helium-drm --dry-run` prints the exact path.
 
 ## 🔒 Safety and privacy
 
-- **Verified downloads.** The one-line installers check the executable's SHA-256 against the `SHA256SUMS.txt` published with each release, and refuse to run on a mismatch. Chrome downloads are checksum-cached too.
-- **No telemetry.** The tool collects nothing and phones home to nobody. It only goes online to:
-  - download itself from GitHub (one-line installers only), and
-  - download Chrome, only if no Widevine exists on your computer (GitHub on Windows, `dl.google.com` on Linux).
-- **No admin rights, normally.** Everything happens in your user folders. Administrator rights are only needed if Helium is installed for all users in `C:\Program Files`.
+- **Verified downloads.** The one-line installers check the executable's SHA-256 against the `SHA256SUMS.txt` published with each release, and refuse to run on a mismatch. Widevine downloads are checked against the SHA-256 (Google) or SHA-512 (Mozilla) hash the update server publishes, and a ZIP entry that tries to write outside its folder is refused.
+- **No telemetry.** The tool collects nothing and sends nothing about you. It only goes online to:
+  - download itself from GitHub (one-line installers only),
+  - download Widevine, only if no copy exists on your computer (or with `--latest` / `--force-download`): Google's update server, then Mozilla's, then a Chrome download,
+  - check GitHub for a newer version of the fixer (2.5-second limit; skipped by the one-liners; set `HELIUM_DRM_FIXER_NO_UPDATE_CHECK=1` to turn it off).
+
+  `--offline` turns off every download. The DRM check after installing uses a local page on `127.0.0.1` and needs no internet.
+- **No admin rights, normally.** Everything happens in your user folders, including the `--auto` scheduled task. Administrator rights are only needed if Helium is installed for all users in `C:\Program Files`.
+- **Never touches your Helium profile to test.** Verification uses a temporary profile that is deleted right after.
 - **Changes only one folder.** Your other browsers' Widevine copies are only read, never modified. In Helium, only the `WidevineCdm` folder is written.
 - **Asks before closing Helium.** It closes Helium the normal way so your session is saved, and restores your tabs when it reopens.
 - **Open source.** Every line is in this repository, under the MIT license.
@@ -367,7 +448,6 @@ This tool gives Helium a working Widevine CDM. It does **not** change Helium's C
 
 - **Usually works:** sites that accept any browser with Widevine, for example YouTube movies and Crunchyroll.
 - **May fail or be limited:** services with strict checks, such as Netflix or Amazon Prime Video. They can require an approved browser, VMP signatures, hardware-backed security or output protection that no copied CDM can provide, and may limit video quality where they do play.
-- **ARM64 Linux:** Google doesn't publish Chrome for ARM Linux, so the automatic download isn't available there. A local copy (for example from Chromium or Firefox) still works, or pass `--chrome-path`.
 - **macOS:** basic support is in the code (copy plus re-signing Helium.app), but it isn't the focus and isn't tested.
 
 ---
@@ -394,7 +474,7 @@ Helium is still running and you chose not to close it. Run the tool again and an
 <details>
 <summary><b>"No Widevine found" / "Failed to find or download Widevine"</b></summary>
 
-No browser or app on your computer has Widevine yet, and downloading Chrome failed (often a firewall or proxy). Install any supported browser, play a DRM video in it once so it downloads Widevine, and run the tool again. `--list-sources` shows what it can see.
+No browser or app on your computer has Widevine yet, and all three downloads (Google, Mozilla, Chrome) failed, often because of a firewall or proxy. Check that `update.googleapis.com` and `dl.google.com` are reachable. Or install any supported browser, play a DRM video in it once so it downloads Widevine, and run the tool again. `--list-sources` shows what it can see. If you used `--offline`, run without it.
 
 </details>
 
@@ -407,15 +487,22 @@ No browser or app on your computer has Widevine yet, and downloading Chrome fail
 </details>
 
 <details>
+<summary><b>"Couldn't verify" (exit code 2)</b></summary>
+
+Widevine was installed, but the invisible test run of Helium didn't confirm it. Restart Helium and try a DRM site; if it plays, all is well (some systems block starting Helium in the background). If not, try a different copy: `--list-sources`, then for example `--from edge`, or `--force-download` for a fresh copy from Google.
+
+</details>
+
+<details>
 <summary><b>The fix ran, but a site still doesn't play</b></summary>
 
 1. Fully restart Helium. On Windows, check the system tray too.
-2. Check that Helium sees Widevine: open DevTools (F12) on any `https://` page and run
+2. Run `fix-helium-drm --status`: it asks Helium whether DRM works. You can also check by hand: open DevTools (F12) on any `https://` page and run
    `navigator.requestMediaKeySystemAccess('com.widevine.alpha', [{initDataTypes: ['cenc'], videoCapabilities: [{contentType: 'video/mp4; codecs="avc1.42E01E"'}]}]).then(() => 'supported', e => e.message)`.
    It should print `supported`.
 3. Try a simpler DRM test first, for example the Widevine demo at [bitmovin.com/demos/drm](https://bitmovin.com/demos/drm).
 4. If the simple test works but a particular service doesn't, see [Limitations](#%EF%B8%8F-limitations): that service is probably checking more than Widevine.
-5. Try a different Widevine: `fix-helium-drm --list-sources`, then for example `--from edge`.
+5. Try a different Widevine: `fix-helium-drm --list-sources`, then for example `--from edge`, or the newest from Google with `--latest`.
 
 </details>
 
@@ -443,13 +530,22 @@ No. It only adds the `WidevineCdm` folder, exactly as if Helium had downloaded i
 Usually the newest, and that's what the tool picks automatically. All copies come from Google, so a copy from Spotify works just like one from Chrome.
 
 **Do I need to keep Chrome installed?**
-No. Once Widevine is copied, Helium has its own copy. You can even run the fixer with no Chrome at all: it uses another browser's copy, or downloads Chrome temporarily just to take Widevine from it.
+No. Once Widevine is copied, Helium has its own copy. You don't even need Chrome to start with: the fixer uses another browser's copy, or downloads just the ~20 MB Widevine package from Google.
+
+**Where does a downloaded Widevine come from?**
+From Google's own servers, through the same component-update service Chrome, Edge and Brave use to install Widevine. Mozilla's update server (Firefox's route) is the backup, and it points at the same Google packages.
+
+**Do I have to run it again after Helium updates?**
+On Linux, no. On Windows, either run it again or turn on `--auto` once and forget about it.
 
 **Why is the executable ~100 MB?**
 It's a single self-contained file that includes the Bun runtime, so you don't need to install anything. The one-liner deletes it after running.
 
 **Does it work with Helium's portable version?**
-Yes. That's one of the tested setups.
+Yes. That's one of the tested setups. With several Heliums (installed and portable), use `--all`.
+
+**Does it work on ARM?**
+Yes. It reads Helium's CPU type and gets the matching Widevine, downloading the ARM64 build from Google if needed. The Windows executable is x64 and runs on Windows on ARM through emulation; Linux has a native ARM64 build.
 
 ---
 
@@ -469,14 +565,23 @@ bun run build:all    # build Windows x64, Linux x64 and Linux ARM64 into ./dist
 ```text
 cli.ts                    Command-line options
 commands/index.ts         The fix: find → close → install → reopen
+lib/helium.ts             Every Helium install: folder, CPU, version, install/remove
 lib/widevine.ts           Widevine sources, validation, CPU detection, Firefox conversion
+lib/widevine-download.ts  Widevine from Google / Mozilla update servers (Chrome as fallback)
+lib/zip.ts                Built-in ZIP and CRX3 reader
+lib/verify.ts             Invisible in-Helium DRM check via DevTools Protocol
+lib/autofix.ts            Windows scheduled task + window-less copy for --auto
+lib/console.ts            Double-click detection, prompts
+lib/update-check.ts       "New version available" notice
 lib/paths.ts              Finding Chrome and Helium on each OS
 lib/windows.ts            Registry, running processes, closing/reopening programs
-lib/chrome-downloader.ts  Chrome download (GitHub on Windows, .deb on Linux), caching
+lib/chrome-downloader.ts  Chrome download (last resort), download helper with progress
 lib/deb.ts                Minimal .deb (ar) reader
 lib/extractor.ts          Bundled 7-Zip extraction (Windows)
 install.ps1 / install.sh  One-line installers
+packaging/                Scoop, winget and AUR manifests (regenerated on every release)
 scripts/release.ts        One-command release
+scripts/packaging.ts      Writes the package-manager manifests
 ```
 
 ### Releasing
