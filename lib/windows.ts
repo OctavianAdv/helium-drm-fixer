@@ -126,6 +126,27 @@ export async function findRunningExecutables(exeName: string): Promise<string[]>
   return [...new Set((await findRunningProcesses(exeName)).map((p) => p.path))];
 }
 
+/**
+ * Start a program from a full command line, owned by Windows rather than by
+ * us (via WMI), so it keeps running when this tool and its terminal close.
+ */
+export async function startIndependentProcess(commandLine: string): Promise<void> {
+  const quoted = commandLine.replace(/'/g, "''");
+  const { stdout } = await execFileAsync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `(Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = '${quoted}' }).ReturnValue`,
+    ],
+    { windowsHide: true }
+  );
+  if (stdout.trim() !== "0") {
+    throw new Error(`Win32_Process.Create returned ${stdout.trim()}`);
+  }
+}
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);

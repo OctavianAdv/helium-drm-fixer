@@ -10,10 +10,14 @@ import {
 import { copyDir } from "../lib/utils";
 import { initLogger, type Logger } from "../lib/logger";
 import { downloadAndExtractChrome } from "../lib/chrome-downloader";
-import { closeProcesses, findRunningProcesses } from "../lib/windows";
+import {
+  closeProcesses,
+  findRunningProcesses,
+  startIndependentProcess,
+} from "../lib/windows";
 import { join, dirname, basename } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { promisify } from "node:util";
 import ora from "ora";
@@ -174,9 +178,12 @@ async function closeRunningHelium(
     : `${main.commandLine} --restore-last-session`;
 }
 
-function reopenHelium(commandLine: string, logger: Logger): void {
+async function reopenHelium(commandLine: string, logger: Logger): Promise<void> {
   logger.info(`Reopening Helium: ${commandLine}`);
-  spawn(commandLine, { shell: true, detached: true, stdio: "ignore" }).unref();
+  await startIndependentProcess(commandLine).catch((error) => {
+    logger.error("Failed to reopen Helium", { error });
+    console.log(chalk.yellow("\n⚠️  Couldn't reopen Helium - please start it yourself.\n"));
+  });
 }
 
 function explainCopyError(error: unknown): void {
@@ -284,12 +291,12 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
     copySpinner.fail(chalk.red("Failed to copy WidevineCdm"));
     logger.error("Failed to copy WidevineCdm", { error });
     explainCopyError(error);
-    if (reopenCommand) reopenHelium(reopenCommand, logger);
+    if (reopenCommand) await reopenHelium(reopenCommand, logger);
     process.exit(1);
   }
 
   if (reopenCommand) {
-    reopenHelium(reopenCommand, logger);
+    await reopenHelium(reopenCommand, logger);
     console.log(chalk.bold.green("\n✅ Done! Helium has been reopened with DRM enabled.\n"));
     logger.info("Done! Helium reopened.");
     return;
