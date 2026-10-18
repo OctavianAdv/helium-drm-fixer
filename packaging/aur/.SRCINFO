@@ -1,6 +1,6 @@
 pkgbase = helium-drm-fixer-bin
 	pkgdesc = Fix DRM (Widevine) in the Helium browser on Windows and Linux
-	pkgver = 1.3.1
+	pkgver = 1.4.0
 	pkgrel = 1
 	url = https://github.com/OctavianAdv/helium-drm-fixer
 	arch = x86_64
@@ -12,9 +12,9 @@ pkgbase = helium-drm-fixer-bin
 	conflicts = helium-drm-fixer
 	options = !strip
 	options = !debug
-	source_x86_64 = fix-helium-drm-1.3.1-x86_64::https://github.com/OctavianAdv/helium-drm-fixer/releases/download/v1.3.1/fix-helium-drm-linux-x64
-	sha256sums_x86_64 = c3cb530666d52d3ca9987e951a7cb08ed109fe911c2c15b8461b017ffeb41d6c
-	source_aarch64 = fix-helium-drm-1.3.1-aarch64::https://github.com/OctavianAdv/helium-drm-fixer/releases/download/v1.3.1/fix-helium-drm-linux-arm64
-	sha256sums_aarch64 = 5fb234f80aad6bc514e24487aeba0662b41d833e9a8bd8594ebbbd46976a6455
+	source_x86_64 = fix-helium-drm-1.4.0-x86_64::https://github.com/OctavianAdv/helium-drm-fixer/releases/download/v1.4.0/fix-helium-drm-linux-x64
+	sha256sums_x86_64 = 0f11c006d61a0cc68bb070f51d2054e35b229d651af0375d423e786ef1e98c51
+	source_aarch64 = fix-helium-drm-1.4.0-aarch64::https://github.com/OctavianAdv/helium-drm-fixer/releases/download/v1.4.0/fix-helium-drm-linux-arm64
+	sha256sums_aarch64 = ec623d92e11f42223b2afd454353336a1cdfcc79b9bb8f737457390468729789
 
 pkgname = helium-drm-fixer-bin
