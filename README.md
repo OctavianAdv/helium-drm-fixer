@@ -509,11 +509,11 @@ Commit messages follow a simple style: `feat: …` for new features, `fix: …` 
 
 ## 📜 License and legal
 
-The code in this repository is released under the **[MIT License](LICENSE.md)**. Copyright © 2026 OctavianAdv.
+The code in this repository is released under the **[MIT License](LICENSE.md)**. Copyright © 2026 OctavianAdv. A plain-language summary, the Widevine notice and all third-party licenses are in **[NOTICE.md](NOTICE.md)**.
 
 **About Widevine.** Widevine is proprietary software owned by Google LLC. This project does **not** include, bundle or redistribute the Widevine CDM. The tool only copies a Widevine module that already exists on the user's computer (or that the user's machine downloads directly from Google as part of Chrome) into the user's own Helium installation. The MIT license covers this tool's code only; Widevine remains under Google's own terms.
 
-**Third-party software** included in the executables (7-Zip, Bun, and npm packages) is listed with its licenses in [LICENSE.md](LICENSE.md#third-party-software).
+**Third-party software** included in the executables (7-Zip, Bun, and npm packages) is listed with its licenses in [NOTICE.md](NOTICE.md#third-party-software).
 
 **Not affiliated.** This is an independent community project. It is not affiliated with, endorsed by or sponsored by imput (Helium), Google, Microsoft, Mozilla, Brave, Opera, Vivaldi, Spotify or any streaming service. All product names and trademarks belong to their owners.
 
