@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { fixHeliumDrm } from "./commands/index";
+import pkg from "./package.json" with { type: "json" };
 
 const program = new Command();
 
@@ -9,7 +10,7 @@ program
   .description(
     "Fix DRM issues in Helium browser by copying WidevineCdm from Chrome"
   )
-  .version("1.0.0")
+  .version(pkg.version)
   .option("--check", "Check if fix is needed without applying changes")
   .option("--dry-run", "Show what would be done without making changes")
   .option("--verbose", "Enable verbose logging")

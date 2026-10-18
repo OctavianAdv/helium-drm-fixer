@@ -9,7 +9,11 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build cli.ts --compile --outfile ./dist/fix-helium-drm"
+    "build": "bun build cli.ts --compile --outfile ./dist/fix-helium-drm",
+    "build:windows": "bun build cli.ts --compile --target=bun-windows-x64 --outfile ./dist/fix-helium-drm-windows-x64.exe",
+    "build:linux": "bun build cli.ts --compile --target=bun-linux-x64 --outfile ./dist/fix-helium-drm-linux-x64",
+    "build:linux-arm64": "bun build cli.ts --compile --target=bun-linux-arm64 --outfile ./dist/fix-helium-drm-linux-arm64",
+    "build:all": "bun run build:windows && bun run build:linux && bun run build:linux-arm64"
   },
   "private": true,
   "devDependencies": {
