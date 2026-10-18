@@ -260,6 +260,7 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
   }
 
   let failures = 0;
+  let unverified = 0;
   for (const install of installs) {
     const source = chosen.get(install.arch)!;
     if (installs.length > 1) console.log(chalk.bold(`\n${describeHelium(install)} - ${install.dir}`));
@@ -268,7 +269,7 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
     const upToDate = current && compareVersions(current.version, source.version) >= 0;
 
     let reopen: string | null = null;
-    if (upToDate && !options.reinstall) {
+    if (upToDate && !options.reinstall && !options.forceDownload) {
       console.log(`${chalk.green("✔")} Widevine ${current!.version} is already installed ${chalk.dim("(use --reinstall to copy it again)")}`);
     } else {
       reopen = await closeRunningHelium(install, options, logger, "apply the fix");
@@ -290,7 +291,10 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
       const check = ora("Verifying: asking Helium whether DRM works...").start();
       const result = await verifyWidevine(install);
       if (result.ok) check.succeed(chalk.green(`Verified: ${result.message}`));
-      else check.warn(chalk.yellow(`Couldn't verify: ${result.message}`));
+      else {
+        check.warn(chalk.yellow(`Couldn't verify: ${result.message}`));
+        unverified++;
+      }
     }
 
     if (getPlatform() === "darwin") await resignMac(logger);
@@ -299,6 +303,11 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
   }
 
   if (failures) exit(1);
+  if (unverified) {
+    console.log(chalk.yellow("\n⚠️  Widevine was installed, but Helium couldn't confirm DRM works. Restart Helium and try a DRM site;"));
+    console.log(chalk.yellow("   if it still fails, try another copy: --list-sources, then --from <name>.\n"));
+    exit(2);
+  }
   const restart = getPlatform() === "win32" ? "" : " Restart Helium if it's open.";
   console.log(chalk.bold.green(`\n✅ Done! DRM is enabled in Helium.${restart}\n`));
 }
