@@ -21,6 +21,7 @@ program
     "Custom Helium version folder (Windows/macOS) or profile folder (Linux)"
   )
   .option("--force-download", "Force re-download Chrome even if cached")
+  .option("-y, --yes", "Close and reopen Helium without asking (Windows)")
   .action(async (options) => {
     try {
       await fixHeliumDrm({
@@ -30,6 +31,7 @@ program
         chromePath: options.chromePath,
         heliumPath: options.heliumPath,
         forceDownload: options.forceDownload,
+        yes: options.yes,
       });
     } catch (error) {
       console.error("Error:", error);

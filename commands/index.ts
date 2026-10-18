@@ -2,15 +2,19 @@ import {
   findChromeWidevinePath,
   findHeliumVersionPath,
   findHeliumUserDataDir,
+  findHeliumLinuxInstall,
+  getDefaultHeliumUserDataDir,
   getPlatform,
   getSudoOwner,
 } from "../lib/paths";
 import { copyDir } from "../lib/utils";
 import { initLogger, type Logger } from "../lib/logger";
 import { downloadAndExtractChrome } from "../lib/chrome-downloader";
-import { join, dirname } from "node:path";
+import { closeProcesses, findRunningProcesses } from "../lib/windows";
+import { join, dirname, basename } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { promisify } from "node:util";
 import ora from "ora";
 
@@ -24,6 +28,7 @@ export interface FixHeliumDrmOptions {
   chromePath?: string;
   heliumPath?: string;
   forceDownload?: boolean;
+  yes?: boolean;
 }
 
 async function getChromeWidevinePath(
@@ -91,21 +96,14 @@ async function getHeliumWidevinePath(
     return join(heliumVersionPath, "WidevineCdm");
   }
 
-  const userDataDir = options.heliumPath ?? (await findHeliumUserDataDir());
+  let userDataDir = options.heliumPath ?? (await findHeliumUserDataDir());
   if (!userDataDir) {
-    spinner.fail(chalk.red("Could not find the Helium profile folder"));
-    console.log(
-      chalk.yellow(
-        "\n⚠️  Install Helium and launch it at least once, then run this tool again."
-      )
-    );
-    console.log(
-      chalk.dim(
-        "   Or pass the profile folder: --helium-path ~/.config/net.imput.helium\n"
-      )
-    );
-    logger.error("Helium user data directory not found");
-    process.exit(1);
+    // Helium is installed but was never opened: set up its profile folder ourselves
+    const install = await findHeliumLinuxInstall();
+    if (!install) exitHeliumNotFound(spinner, logger);
+
+    userDataDir = getDefaultHeliumUserDataDir();
+    logger.info(`Helium found at ${install}, but no profile yet. Using ${userDataDir}`);
   }
 
   const manifest = JSON.parse(
@@ -117,6 +115,68 @@ async function getHeliumWidevinePath(
   const heliumWidevinePath = join(userDataDir, "WidevineCdm", version);
   logger.info(`Using Linux component updater path: ${heliumWidevinePath}`);
   return heliumWidevinePath;
+}
+
+async function ask(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Windows locks Helium's files while it runs. If Helium is open from the
+ * folder we are about to change, close it (after asking) and return the
+ * command line to reopen it with afterwards.
+ */
+async function closeRunningHelium(
+  heliumWidevinePath: string,
+  options: FixHeliumDrmOptions,
+  logger: Logger
+): Promise<string | null> {
+  if (getPlatform() !== "win32") return null;
+
+  // Application\<version>\WidevineCdm -> Application; portable -> its folder
+  let appRoot = dirname(heliumWidevinePath);
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(basename(appRoot))) appRoot = dirname(appRoot);
+  const prefix = appRoot.toLowerCase() + "\\";
+
+  const running = (await findRunningProcesses("chrome.exe")).filter((p) =>
+    p.path.toLowerCase().startsWith(prefix)
+  );
+  if (!running.length) return null;
+
+  logger.info(`Helium is running (${running.length} processes)`);
+  if (!options.yes) {
+    if (!process.stdin.isTTY) {
+      console.log(chalk.yellow("\n⚠️  Helium is open. If copying fails, close Helium or run with --yes.\n"));
+      return null;
+    }
+    const answer = await ask(
+      chalk.yellow("\nHelium is open. Close it now to apply the fix? It will reopen afterwards. [Y/n] ")
+    );
+    if (/^n/i.test(answer.trim())) {
+      console.log(chalk.dim("\n   Close Helium and run this again when you're ready.\n"));
+      process.exit(0);
+    }
+  }
+
+  const spinner = ora("Closing Helium...").start();
+  const main = running.find((p) => !p.commandLine.includes("--type=")) ?? running[0]!;
+  await closeProcesses(running.map((p) => p.pid));
+  spinner.succeed(chalk.green("Closed Helium"));
+
+  // Reopen with the same arguments, and bring the tabs back
+  return main.commandLine.includes("--restore-last-session")
+    ? main.commandLine
+    : `${main.commandLine} --restore-last-session`;
+}
+
+function reopenHelium(commandLine: string, logger: Logger): void {
+  logger.info(`Reopening Helium: ${commandLine}`);
+  spawn(commandLine, { shell: true, detached: true, stdio: "ignore" }).unref();
 }
 
 function explainCopyError(error: unknown): void {
@@ -190,6 +250,8 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
     return;
   }
 
+  const reopenCommand = await closeRunningHelium(heliumWidevinePath, options, logger);
+
   const copySpinner = ora(
     "Copying WidevineCdm from Chrome to Helium..."
   ).start();
@@ -208,7 +270,10 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
       // Under sudo, give the files back to the user so Helium can read them
       const owner = getSudoOwner();
       if (owner) {
-        await execFileAsync("chown", ["-R", `${owner.uid}:${owner.gid}`, widevineRoot]);
+        const ownerArg = `${owner.uid}:${owner.gid}`;
+        await execFileAsync("chown", ["-R", ownerArg, widevineRoot]);
+        // The profile folder itself, in case we just created it
+        await execFileAsync("chown", [ownerArg, dirname(widevineRoot)]);
         logger.info(`Changed owner of ${widevineRoot} to ${owner.uid}:${owner.gid}`);
       }
     }
@@ -219,7 +284,15 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
     copySpinner.fail(chalk.red("Failed to copy WidevineCdm"));
     logger.error("Failed to copy WidevineCdm", { error });
     explainCopyError(error);
+    if (reopenCommand) reopenHelium(reopenCommand, logger);
     process.exit(1);
+  }
+
+  if (reopenCommand) {
+    reopenHelium(reopenCommand, logger);
+    console.log(chalk.bold.green("\n✅ Done! Helium has been reopened with DRM enabled.\n"));
+    logger.info("Done! Helium reopened.");
+    return;
   }
 
   if (getPlatform() === "darwin") {
