@@ -102,26 +102,27 @@ async function checkCachedVersion(
   }
 }
 
-async function downloadFile(
+export async function downloadFile(
   url: string,
   destPath: string,
   options: DownloadOptions
 ): Promise<void> {
   const { logger } = options;
 
-  const response = await fetch(url);
+  // Ask for the raw bytes: with gzip, Content-Length is the compressed size
+  const response = await fetch(url, { headers: { "Accept-Encoding": "identity" } });
   if (!response.ok) {
     throw new Error(
-      formatError("Failed to download Chrome installer", {
+      formatError("Download failed", {
         status: response.status,
       })
     );
   }
 
-  const contentLength = Number(response.headers.get("content-length"));
-  if (!contentLength) {
-    throw new Error("Content-Length header not found in response");
-  }
+  // Only trust Content-Length when the body isn't re-encoded on the way
+  const contentLength = response.headers.get("content-encoding")
+    ? 0
+    : Number(response.headers.get("content-length")) || 0;
 
   const reader = response.body!.getReader();
   const writer = Bun.file(destPath).writer();
@@ -136,20 +137,19 @@ async function downloadFile(
 
       writer.write(value);
       downloaded += value.length;
-      const percentage = Math.min(
-        100,
-        Math.round((downloaded / contentLength) * 100)
-      );
-      displayProgress({ downloaded, total: contentLength, percentage });
+      const percentage = contentLength
+        ? Math.min(100, Math.round((downloaded / contentLength) * 100))
+        : 0;
+      displayProgress({ downloaded, total: contentLength || downloaded, percentage });
     }
   } finally {
     await writer.end();
     process.stdout.write("\n");
   }
 
-  if (downloaded !== contentLength) {
+  if (contentLength && downloaded !== contentLength) {
     throw new Error(
-      formatError("Chrome download was incomplete", {
+      formatError("Download was incomplete", {
         downloaded,
         expected: contentLength,
       })
@@ -193,7 +193,7 @@ async function downloadCached(
   await Bun.write(versionFile, JSON.stringify(cacheData));
 }
 
-async function getDownloadDir(): Promise<string> {
+export async function getDownloadDir(): Promise<string> {
   const tempDir = join(tmpdir(), "helium-drm-download");
   await mkdir(tempDir, { recursive: true });
   return tempDir;
