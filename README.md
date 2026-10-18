@@ -58,7 +58,7 @@ Helium is open. Close it now to apply the fix? It will reopen afterwards. [Y/n] 
 ✅ Done! DRM is enabled in Helium.
 ```
 
-Want it to stay fixed after Helium updates? Run it once with `--auto` (Windows and macOS). It speaks your language too: English, Română, Español, Deutsch, Français, Português, Italiano and Русский.
+Want it to stay fixed after Helium updates, with Widevine always on the newest version? Run it once with `--auto`, or flip **Automatic updates** in the window. It speaks your language too: English, Română, Español, Deutsch, Français, Português, Italiano and Русский.
 
 ---
 
@@ -113,7 +113,8 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 | Gets Widevine from more than just Chrome | ❌ | Chrome only | ✅ **28 browsers and apps, incl. Brave, Edge, Firefox and Spotify** |
 | Downloads **only Widevine** when needed | ❌ | Whole Chrome (~500 MB) | ✅ **~20 MB straight from Google, with Mozilla and Chrome as fallbacks** |
 | **Proves** DRM works afterwards | ❌ | ❌ | ✅ **Asks Helium itself, invisibly, in about a second** |
-| Stays fixed after Helium updates | ❌ | ❌ | ✅ **`--auto` re-applies it in the background (Windows); Linux never loses it** |
+| Stays fixed after Helium updates | ❌ | ❌ | ✅ **`--auto` re-applies it in the background (Windows, macOS, Linux)** |
+| Keeps Widevine on the **newest** version | ❌ | ❌ | ✅ **`--auto` installs new Widevine releases from Google as they come out** |
 | ARM64 support | – | Rarely | ✅ **Apple Silicon, Windows ARM64 and Linux ARM64, matched to Helium's own CPU** |
 | Status, undo, fix every copy | ❌ | ❌ | ✅ `--status`, `--undo`, `--all` |
 | Package managers | – | – | ✅ **Scoop today; winget submitted (and updated automatically on every release); AUR ready** |
@@ -143,10 +144,19 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 - **Handles a running Helium (Windows).** It asks before closing Helium, closes it the polite way so your session is saved, applies the fix, and reopens Helium with the same settings plus `--restore-last-session`. The reopened Helium is started by Windows itself, so it stays open after the terminal closes.
 - **Downloads just Widevine, only when needed.** If no browser or app on your computer has Widevine, it asks Google's component update server (the same one Chrome, Edge and Brave use) for the Widevine package: about 20 MB, verified by SHA-256. If Google can't be reached, it tries Mozilla's update server (Firefox's route). Only as a last resort does it download all of Chrome to take Widevine from it. Downloads are cached, so running again is instant. `--latest` also checks Google for a newer Widevine than your browsers have; `--offline` never downloads anything.
 - **Proves it works.** After installing, it starts Helium invisibly with a throw-away profile, opens a local page (no internet needed) and asks Helium whether Widevine is available, exactly like a streaming site would. It takes about a second, and your own Helium profile is never touched.
-- **Stays fixed (Windows).** `--auto` installs a hidden scheduled task (at logon and every hour, no admin rights needed) that re-applies the fix when a Helium update arrives. `--auto off` removes it completely. On Linux the fix lives in your profile and survives updates by itself.
+- **Automatic updates.** `--auto` (or the switch in the window) sets up a background job that runs at login and every hour, with no admin rights needed:
+  - **Helium updates:** after a Helium update, it re-applies the fix.
+  - **Widevine updates:** every 6 hours it asks Google whether a newer Widevine exists, and installs it, so Helium always has the newest Widevine.
+  - **Never interrupts you:** it never closes Helium. If Helium is using the old Widevine, it waits until Helium is closed.
+
+  It uses a hidden scheduled task on Windows, a LaunchAgent on macOS, and a systemd user timer on Linux (or cron where there's no systemd). Everything it does is written to a short log, and `--auto off` removes it completely.
 - **Matches Helium's CPU.** It reads whether Helium is x64 or ARM64 from Helium's own files and picks or downloads the matching Widevine, including on Windows on ARM and ARM64 Linux.
 - **Status, undo and multiple installs.** `--status` shows each Helium, its Widevine version and whether DRM works. `--undo` removes the fix cleanly. `--all` fixes every Helium it finds (installed and portable). Already up to date? It says so and doesn't touch Helium.
-- **A window version.** Double-click the Windows `.exe` (or run `--gui` anywhere) and a small app window opens: each Helium with a green "DRM works" badge, a big **Fix Helium** button, a Widevine source picker, **Remove the fix**, an auto-fix switch and a live log. It uses an app-style window from Edge (Windows) or Chrome/Brave/Chromium (macOS, Linux) — never Helium itself, since Helium may need to be closed. It talks only to `127.0.0.1`, refuses requests from any other website, and exits when you close the window.
+- **A premium window version.** Double-click the Windows `.exe` (or run `--gui` anywhere) and an app window opens:
+  - **Status at a glance:** a large status emblem with a headline like "DRM works in Helium", plus your Helium and Widevine versions and an "Up to date" badge.
+  - **One-click actions:** a big **Fix Helium** button, which becomes **Update to 4.10.x** when Google has a newer Widevine, and a live 4-step tracker (Find Helium → Get Widevine → Install → Verify).
+  - **Settings:** the Widevine source picker, **Remove the fix**, the **Automatic updates** switch and an activity log.
+  - **Two themes:** **Classic** (warm paper, navy ink, gold hairlines, serif headings) and **Midnight** (deep night blue, soft glows, frosted-glass cards). **Auto** follows your system: light → Classic, dark → Midnight. It uses an app-style window from Edge (Windows) or Chrome/Brave/Chromium (macOS, Linux) — never Helium itself, since Helium may need to be closed. It talks only to `127.0.0.1`, refuses requests from any other website, and exits when you close the window.
 - **Speaks your language.** English, Romanian, Spanish, German, French, Portuguese, Italian and Russian, taken from your Windows/macOS display language or `LANG` on Linux. Choose with `--lang ro` (or `HELIUM_DRM_FIXER_LANG`), or from the menu in the window.
 - **macOS too.** Finds Helium.app (in Applications, a running copy, or through Spotlight), takes Widevine from 20+ Mac browsers, re-signs Helium after the change so macOS accepts it, closes and reopens Helium with your tabs, and `--auto` uses a LaunchAgent to re-apply the fix after Helium updates.
 - **Double-click friendly.** If the window can't open, the console stays open until you press Enter, so you can read the result.
@@ -227,6 +237,8 @@ Also tested on Windows:
 - **`--auto`:** task created without admin rights, window-less, and it re-installed Widevine after a simulated Helium update.
 - **`--all`:** two portable Heliums open at once; both found, closed, fixed, verified and reopened.
 - **`--status`, `--undo`, `--offline`, `--latest`, `--reinstall`**, and the double-click pause.
+- **Automatic Widevine updates:** with an older Widevine (4.10.3050.1) installed, the background job upgraded Helium to 4.10.3112.0 by itself. A second run correctly did nothing, and while Helium held the old Widevine open, it waited instead of failing.
+- **Redesigned window, driven click by click:** installing an older Widevine made the window offer **Update to 4.10.3112.0**, and one click upgraded it, with the progress tracker lighting up step by step. Tested in both themes and against a real installed Helium.
 - **The window version:** double-clicking the compiled `.exe` opened the app window with the console hidden. "Remove the fix" and "Fix Helium" (with Spotify's Widevine) worked from it, including closing and reopening a running Helium, and the program exited when the window was closed. Requests from other websites are refused.
 - **Languages:** the full fix and status runs checked in Romanian, German, Russian, French and Spanish; a test makes sure every translation keeps the right placeholders.
 - **Auto-detection** of a running portable Helium, with no paths given.
@@ -337,7 +349,7 @@ In the examples, `fix-helium-drm` stands for however you run the tool: the one-l
 | `--no-verify` | Skip the check inside Helium after installing. |
 | `-y`, `--yes` | Close and reopen Helium without asking (Windows, macOS). |
 | `--undo` | Remove the fix from Helium. |
-| `--auto` / `--auto off` | Turn automatic re-fixing after Helium updates on or off (Windows, macOS). |
+| `--auto` / `--auto off` | Turn automatic updates on or off: re-fix after Helium updates, and install newer Widevine versions as Google releases them. |
 | `--gui` | Open the window version (also what double-clicking the Windows `.exe` does). |
 | `--lang <code>` | Language: `en`, `ro`, `es`, `de`, `fr`, `pt`, `it`, `ru`. Default: your system language. |
 | `--json` | With `--status` or `--list-sources`: print JSON, for scripts. |
@@ -363,7 +375,7 @@ fix-helium-drm --chrome-path /opt/google/chrome/WidevineCdm --helium-path ~/.con
 # Is DRM working right now?
 fix-helium-drm --status
 
-# Keep Helium fixed after every update (Windows)
+# Keep Helium fixed after every update, and Widevine always the newest
 fix-helium-drm --auto
 
 # Fix both the installed and the portable Helium
@@ -425,7 +437,7 @@ fix-helium-drm --verbose
   - Or simply run the one-liner again; it takes a few seconds.
 - **Windows (portable):** if you unpack a new zip, run the tool again (or use `--auto`; it also finds a running portable Helium).
 - **macOS:** an update replaces Helium.app, which removes Widevine. Run the one-liner again, or turn on `--auto` once: a LaunchAgent re-applies the fix at login and every hour (it waits until Helium is closed, so it never re-signs a running app).
-- **Linux:** the fix lives in your Helium profile, so it **survives Helium updates**. Run the tool again only if you want a newer Widevine.
+- **Linux:** the fix lives in your Helium profile, so it **survives Helium updates**. Turn on `--auto` to also get every new Widevine release automatically.
 
 ---
 
@@ -561,7 +573,7 @@ No. Once Widevine is copied, Helium has its own copy. You don't even need Chrome
 From Google's own servers, through the same component-update service Chrome, Edge and Brave use to install Widevine. Mozilla's update server (Firefox's route) is the backup, and it points at the same Google packages.
 
 **Do I have to run it again after Helium updates?**
-On Linux, no. On Windows, either run it again or turn on `--auto` once and forget about it.
+On Linux, no. On Windows and macOS, either run it again or turn on `--auto` once and forget about it. `--auto` also keeps Widevine itself at the newest version on every system.
 
 **Why is the executable ~100 MB?**
 It's a single self-contained file that includes the Bun runtime, so you don't need to install anything. The one-liner deletes it after running.
@@ -603,7 +615,8 @@ lib/zip.ts                Built-in ZIP and CRX3 reader
 lib/verify.ts             Invisible in-Helium DRM check via DevTools Protocol
 lib/autofix.ts            Windows scheduled task + window-less copy for --auto
 lib/console.ts            Double-click detection, prompts
-lib/gui.ts                The window version: local page + app window
+lib/gui.ts                The window version: local server + app window
+lib/gui-page.ts           The window's page: Classic and Midnight themes, progress tracker
 lib/i18n.ts               Translations (8 languages) and language detection
 lib/update-check.ts       "New version available" notice
 lib/paths.ts              Finding Chrome and Helium on each OS
