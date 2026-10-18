@@ -225,6 +225,11 @@ export async function installIntoHelium(install: HeliumInstall, source: Widevine
     await writeFile(hintFile, JSON.stringify({ Path: dest }));
     log.info(`Wrote hint file: ${hintFile}`);
 
+    // Remove older Widevine versions (Linux doesn't lock them, and only the hinted one is used)
+    for (const old of await listVersionDirs(root)) {
+      if (join(root, old) !== dest) await rm(join(root, old), { recursive: true, force: true }).catch(() => {});
+    }
+
     // Under sudo, give the files back to the user so Helium can read them
     const owner = getSudoOwner();
     if (owner) {
