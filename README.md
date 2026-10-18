@@ -8,6 +8,42 @@ Helium browser often has issues with DRM-protected content because it doesn't in
 
 ## Quick start
 
+Paste one line, and it does the rest: it finds Helium and Widevine on its own, asks before closing Helium, applies the fix and reopens Helium with your tabs.
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.ps1 | iex
+```
+
+### Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.sh | bash
+```
+
+Both download the latest release, check its SHA-256 checksum, run it and delete it afterwards. Nothing stays installed.
+
+To pass [options](#options):
+
+```powershell
+# Windows
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.ps1))) --dry-run
+```
+
+```bash
+# Linux
+curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.sh | bash -s -- --dry-run
+```
+
+### What it finds automatically
+
+- **Helium on Windows:** the normal installer (per-user or all users), the registry, a Helium window that's currently open, and the portable zip unpacked in Downloads, Desktop, Documents, your user folder or `C:\`.
+- **Helium on Linux:** its profile folder. If Helium is installed (`/opt/helium`, an AppImage, on your `PATH`) but was never opened, the tool creates the profile folder itself.
+- **Widevine:** Google Chrome first. Then copies already downloaded by Edge, Brave, Vivaldi or Chromium. If there are none, it downloads Chrome just to take Widevine from it.
+
+## Manual download
+
 Download the file for your system from the [latest release](https://github.com/OctavianAdv/helium-drm-fixer/releases/latest):
 
 | System | File |
@@ -15,8 +51,6 @@ Download the file for your system from the [latest release](https://github.com/O
 | Windows (x64, also runs on ARM) | `fix-helium-drm-windows-x64.exe` |
 | Linux (x64) | `fix-helium-drm-linux-x64` |
 | Linux (ARM64) | `fix-helium-drm-linux-arm64` |
-
-**Close Helium first**, then run the tool.
 
 ### Windows
 
@@ -35,9 +69,7 @@ chmod +x fix-helium-drm-linux-x64
 ./fix-helium-drm-linux-x64
 ```
 
-No `sudo` needed. Launch Helium at least once before running the tool, so its profile folder exists.
-
-Restart Helium when it's done.
+No `sudo` needed. Restart Helium when it's done.
 
 ## Run from source
 
@@ -50,14 +82,15 @@ bun run cli.ts
 
 ## How it works
 
-1. **Finds Chrome's WidevineCdm.** Looks for Chrome in its usual install folders (picking the newest version). If Chrome isn't installed, it downloads it:
+1. **Finds a WidevineCdm.** Checks Chrome (install folders, registry, `PATH`), then the copies other Chromium browsers keep in their profiles. Each one is checked for a real CDM library before use, since browsers can leave empty folders behind. If none is found, it downloads Chrome:
    - Windows: the official uncompressed installer, via [Bush2021/chrome_installer](https://github.com/Bush2021/chrome_installer), unpacked with a bundled 7-Zip.
    - Linux (x64): Google's official `.deb` package, unpacked without `dpkg` (only `tar` and `xz` are needed), so it works on any distro.
 2. **Finds Helium.**
-   - Windows: `%LOCALAPPDATA%\imput\Helium\Application\<version>` (or the same path under `Program Files`).
+   - Windows: the folder that holds Helium's `chrome.dll`. That is `...\imput\Helium\Application\<version>` for the installer, or the unpacked folder itself for the portable zip. (Helium's Windows exe is called `chrome.exe`, so the tool only accepts paths that contain "helium".)
    - Linux: Helium's profile folder, `~/.config/net.imput.helium`. This works for every install type: AppImage, tarball or distro package.
-3. **Copies WidevineCdm.**
-   - Windows: into Helium's newest version folder.
+3. **Closes Helium if needed** (Windows), because Windows locks files that are in use. It asks first, closes Helium gracefully so it saves your tabs, and reopens it afterwards with the same settings.
+4. **Copies WidevineCdm.**
+   - Windows: next to Helium's `chrome.dll`.
    - Linux: into `<profile>/WidevineCdm/<version>/`, plus the hint file Chromium uses to load a component-updated CDM.
 
 Downloads are cached in your temp folder and verified by checksum, so running the tool again is fast.
@@ -71,6 +104,7 @@ Downloads are cached in your temp folder and verified by checksum, so running th
 --chrome-path <path>  Use this WidevineCdm folder instead of finding Chrome
 --helium-path <path>  Helium version folder (Windows/macOS) or profile folder (Linux)
 --force-download      Download Chrome again even if it is cached
+-y, --yes             Close and reopen Helium without asking (Windows)
 ```
 
 ### Custom paths
@@ -98,10 +132,10 @@ Google doesn't publish Chrome for ARM Linux, so on ARM64 Linux the automatic dow
 ## Troubleshooting
 
 ### "Helium browser not found" / "Could not find the Helium profile folder"
-Install Helium from [helium.is](https://helium.is/). On Linux, launch it once so it creates its profile folder.
+Install Helium from [helium.is](https://helium.is/). If it's installed somewhere unusual (for example a portable copy on another drive), open Helium and run the tool again: it finds a running Helium. Or pass `--helium-path`.
 
 ### "WidevineCdm is in use"
-Helium is still running. Close every Helium window (check the system tray on Windows) and run the tool again.
+Helium is still running and you chose not to close it. Run the tool again and answer yes, or use `--yes`.
 
 ### "Chrome not found"
 The tool downloads Chrome automatically. If that fails, install Chrome from [google.com/chrome](https://www.google.com/chrome/).

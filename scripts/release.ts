@@ -103,8 +103,23 @@ async function releaseNotes(tag: string): Promise<string> {
     .filter(([, items]) => items.length)
     .map(([title, items]) => `### ${title}\n\n${items.join("\n")}`);
 
+  const raw = `https://raw.githubusercontent.com/${REPO}/main`;
   const download = [
-    "### ⬇️ Download",
+    "### ⬇️ Install",
+    "",
+    "**Windows** (PowerShell):",
+    "",
+    "```powershell",
+    `irm ${raw}/install.ps1 | iex`,
+    "```",
+    "",
+    "**Linux:**",
+    "",
+    "```bash",
+    `curl -fsSL ${raw}/install.sh | bash`,
+    "```",
+    "",
+    "Or download the file for your system:",
     "",
     "| System | File |",
     "| --- | --- |",
@@ -112,7 +127,7 @@ async function releaseNotes(tag: string): Promise<string> {
     "| Linux (x64) | `fix-helium-drm-linux-x64` |",
     "| Linux (ARM64) | `fix-helium-drm-linux-arm64` |",
     "",
-    "Close Helium, run the file for your system, then restart Helium. On Linux, run `chmod +x` on it first. See the [README](https://github.com/" +
+    "On Linux, run `chmod +x` on it first. See the [README](https://github.com/" +
       REPO +
       "#quick-start) for details.",
   ].join("\n");
