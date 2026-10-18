@@ -256,7 +256,7 @@ Prefer to read a script before running it? It's short, and that's a good habit:
 | | Command | Status |
 | --- | --- | --- |
 | **Scoop** (Windows) | `scoop install https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/packaging/scoop/helium-drm-fixer.json` | ✅ Available |
-| **winget** (Windows) | `winget install OctavianAdv.HeliumDrmFixer` | ⏳ Manifest ready, waiting for approval |
+| **winget** (Windows) | `winget install OctavianAdv.HeliumDrmFixer` | ⏳ [Submitted](https://github.com/microsoft/winget-pkgs/pull/455436), waiting for review |
 | **AUR** (Arch Linux) | `yay -S helium-drm-fixer-bin` | ⏳ PKGBUILD ready, not published yet |
 
 Installed this way, the command is simply `fix-helium-drm`.
