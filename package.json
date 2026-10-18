@@ -17,6 +17,9 @@
     "release": "bun scripts/release.ts"
   },
   "private": true,
+  "license": "MIT",
+  "author": "OctavianAdv",
+  "repository": "github:OctavianAdv/helium-drm-fixer",
   "devDependencies": {
     "@types/bun": "latest"
   },
