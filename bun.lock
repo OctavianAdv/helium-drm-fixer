@@ -1,11 +1,10 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "helium-drm",
       "dependencies": {
-        "7zip-min": "^2.1.0",
+        "7zip-bin": "5.1.1",
         "@agent-infra/browser-finder": "^0.2.1",
         "chalk": "^5.6.2",
         "commander": "^12.1.0",
@@ -24,8 +23,6 @@
   },
   "packages": {
     "7zip-bin": ["7zip-bin@5.1.1", "", {}, "sha512-sAP4LldeWNz0lNzmTird3uWfFDWWTeg6V/MsmyyLR9X1idwKBWIgt/ZvinqQldJm3LecKEs1emkbquO6PCiLVQ=="],
-
-    "7zip-min": ["7zip-min@2.1.0", "", { "dependencies": { "7zip-bin": "5.1.1" } }, "sha512-6uoMmPaasBQOyEuMIuNnASA6mF6ZfNmhsKdxJiEbtkHt9DkrJ0w1cZwyNdkDeOKjR2c5gOQAEkvMN3gyZ9MEBw=="],
 
     "@agent-infra/browser-finder": ["@agent-infra/browser-finder@0.2.1", "", { "dependencies": { "@agent-infra/logger": "0.0.2-beta.2", "edge-paths": "3.0.5", "which": "5.0.0" } }, "sha512-6gUoOPJzJ5xdXg4S5HVGrts6/Bs7JBEiuVQjMFQY0O1uTx306UNobqxpi8Hvvwo8ky4P+zqokXk1JewU3+9xTg=="],
 

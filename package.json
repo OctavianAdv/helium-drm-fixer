@@ -20,7 +20,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "7zip-min": "^2.1.0",
+    "7zip-bin": "5.1.1",
     "@agent-infra/browser-finder": "^0.2.1",
     "chalk": "^5.6.2",
     "commander": "^12.1.0",
