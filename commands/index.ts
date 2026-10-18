@@ -17,6 +17,8 @@ import {
   disableAutoFix,
   enableAutoFix,
   isAutoFixEnabled,
+  readAutoState,
+  writeAutoState,
 } from "../lib/autofix";
 import { initLogger, type Logger } from "../lib/logger";
 import { closeProcesses, findRunningProcesses, startIndependentProcess } from "../lib/windows";
@@ -55,6 +57,14 @@ export interface FixHeliumDrmOptions {
 type Spinner = ReturnType<typeof ora>;
 
 const HELIUM_URL = "https://helium.computer/";
+
+/** Hours between automatic checks with Google for a newer Widevine. */
+const GOOGLE_CHECK_HOURS = 6;
+
+/** The window version follows progress through these markers (hidden from its log). */
+function step(name: "helium" | "widevine" | "install" | "verify" | "done"): void {
+  if (process.env.HELIUM_DRM_FIXER_PROGRESS) console.log(`@@step:${name}`);
+}
 
 function describe(source: WidevineSource): string {
   return t("widevineFrom", { version: source.version, source: source.name });
@@ -274,7 +284,9 @@ async function resignMac(app: string, logger: Logger): Promise<void> {
 async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> {
   console.log(chalk.bold.cyan(`\n${t("fixing")}\n`));
 
+  step("helium");
   const installs = await findInstallsOrExit(options, logger);
+  step("widevine");
 
   // One Widevine per CPU type (normally just one)
   const chosen = new Map<Arch, WidevineSource>();
@@ -311,6 +323,7 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
 
   let failures = 0;
   let unverified = 0;
+  step("install");
   for (const install of installs) {
     const source = chosen.get(install.arch)!;
     if (installs.length > 1) console.log(chalk.bold(`\n${describeHelium(install)} - ${install.dir}`));
@@ -340,6 +353,7 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
     }
 
     if (options.verify !== false) {
+      step("verify");
       const check = ora(t("verifying")).start();
       const result = await verifyWidevine(install);
       if (result.ok) check.succeed(chalk.green(t("verified", { message: result.message })));
@@ -361,6 +375,7 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
     console.log(chalk.yellow(`   ${t("unverifiedHint2")}\n`));
     exit(2);
   }
+  step("done");
   const restart = getPlatform() === "linux" ? ` ${t("restartIfOpen")}` : "";
   console.log(chalk.bold.green(`\n${t("done")}${restart}\n`));
 }
@@ -402,6 +417,8 @@ export interface StatusReport {
     version: string | null;
     arch: string;
     widevine: string | null;
+    /** Newer Widevine available from Google, if any */
+    update: string | null;
     drm: "works" | "missing" | "unconfirmed";
     message: string;
   }>;
@@ -413,24 +430,26 @@ export interface StatusReport {
 
 async function collectStatus(options: FixHeliumDrmOptions, version: string): Promise<StatusReport> {
   const installs = await findHeliumInstalls({ heliumPath: options.heliumPath, all: true });
+  const [sources, google] = await Promise.all([
+    findWidevineSources({ includeApps: true }),
+    options.offline ? null : queryGoogle(getPlatform(), installs[0]?.arch ?? "x64").catch(() => null),
+  ]);
+
   const helium: StatusReport["helium"] = [];
   for (const install of installs) {
     const current = await installedWidevine(install);
     const result = current ? await verifyWidevine(install) : null;
+    const newest = [google?.version, sources[0]?.version].filter(Boolean).sort((a, b) => compareVersions(b!, a!))[0];
     helium.push({
       dir: install.dir,
       version: install.version,
       arch: install.arch,
       widevine: current?.version ?? null,
+      update: current && newest && compareVersions(newest, current.version) > 0 ? newest : null,
       drm: !current ? "missing" : result?.ok ? "works" : "unconfirmed",
       message: result?.message ?? "",
     });
   }
-
-  const [sources, google] = await Promise.all([
-    findWidevineSources({ includeApps: true }),
-    options.offline ? null : queryGoogle(getPlatform(), installs[0]?.arch ?? "x64").catch(() => null),
-  ]);
 
   return {
     version,
@@ -439,7 +458,7 @@ async function collectStatus(options: FixHeliumDrmOptions, version: string): Pro
     sources: sources.length,
     newestLocal: sources[0] ? { version: sources[0].version, name: sources[0].name } : null,
     newestGoogle: google?.version ?? null,
-    auto: getPlatform() === "linux" ? null : await isAutoFixEnabled(),
+    auto: await isAutoFixEnabled(),
   };
 }
 
@@ -465,6 +484,7 @@ async function status(options: FixHeliumDrmOptions, version: string): Promise<vo
     }
     const verdict = h.drm === "works" ? chalk.green(t("drmWorks")) : chalk.yellow(t("notConfirmed", { message: h.message }));
     console.log(`      ${t("widevineLine", { version: h.widevine, verdict })}`);
+    if (h.update) console.log(chalk.yellow(`      ${t("wvUpdateAvailable", { version: h.update })}`));
   }
 
   console.log(chalk.bold(`\n${t("widevineAvailable")}`));
@@ -512,11 +532,6 @@ async function undo(options: FixHeliumDrmOptions, logger: Logger): Promise<void>
 
 async function setAuto(state: boolean | string): Promise<void> {
   const off = typeof state === "string" && /^(off|false|no|disable)$/i.test(state);
-  if (getPlatform() === "linux") {
-    console.log(chalk.green(`\n${t("autoNotNeeded")}\n`));
-    return;
-  }
-
   if (off) {
     await disableAutoFix();
     console.log(chalk.green(`\n${t("autoOffDone")}\n`));
@@ -538,9 +553,10 @@ async function setAuto(state: boolean | string): Promise<void> {
 }
 
 /**
- * Hidden: run by the scheduled task / LaunchAgent. Quietly re-applies the
- * fix to every Helium that is missing Widevine or has an older one.
- * Never closes Helium. (Log messages stay in English.)
+ * Hidden: run every hour by the scheduled task / LaunchAgent / systemd timer.
+ * Re-applies the fix after Helium updates and keeps Widevine at the newest
+ * version: every few hours it asks Google whether a newer Widevine exists
+ * and installs it. Never closes Helium. (Log messages stay in English.)
  */
 async function autoRun(logger: Logger): Promise<void> {
   const installs = await findHeliumInstalls({ all: true });
@@ -549,10 +565,13 @@ async function autoRun(logger: Logger): Promise<void> {
     return;
   }
 
+  const state = await readAutoState();
+  const checkGoogle = Date.now() - (state.lastGoogleCheck ?? 0) > GOOGLE_CHECK_HOURS * 3600_000;
+
   for (const install of installs) {
     const current = await installedWidevine(install);
     try {
-      const source = await chooseWidevine(install.arch, logger, ora({ isEnabled: false }), {});
+      const source = await chooseWidevine(install.arch, logger, ora({ isEnabled: false }), { latest: checkGoogle });
       if (current && compareVersions(current.version, source.version) >= 0) continue;
       if (getPlatform() === "darwin" && install.appBundle && (await macHeliumPids(install.appBundle)).length) {
         await autoLog(`Helium is running - will fix ${install.dir} after it closes`);
@@ -560,11 +579,19 @@ async function autoRun(logger: Logger): Promise<void> {
       }
       await installIntoHelium(install, source);
       if (getPlatform() === "darwin" && install.appBundle) await resignMac(install.appBundle, logger);
-      await autoLog(`Installed Widevine ${source.version} from ${source.name} into ${install.dir}`);
+      const what = current ? `Updated Widevine ${current.version} -> ${source.version}` : `Installed Widevine ${source.version}`;
+      await autoLog(`${what} from ${source.name} into ${install.dir}`);
     } catch (error) {
-      await autoLog(`Couldn't fix ${install.dir}: ${errorMessage(error)} (will retry)`);
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "EBUSY" || code === "EPERM") {
+        await autoLog(`Helium is using Widevine in ${install.dir} - will update after Helium is closed`);
+      } else {
+        await autoLog(`Couldn't fix ${install.dir}: ${errorMessage(error)} (will retry)`);
+      }
     }
   }
+
+  if (checkGoogle) await writeAutoState({ ...state, lastGoogleCheck: Date.now() });
 }
 
 // ---------------------------------------------------------------------------
