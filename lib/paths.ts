@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { readdir, stat, realpath } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { getLogger } from "./logger";
+import { findAppPath, findInstallLocations, findRunningExecutables } from "./windows";
 
 export interface PlatformPaths {
   chromeWidevine: string;
@@ -52,6 +53,43 @@ async function isDirectory(path: string): Promise<boolean> {
   }
 }
 
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+const WIDEVINE_LIBRARY: Record<Platform, string> = {
+  win32: "widevinecdm.dll",
+  linux: "libwidevinecdm.so",
+  darwin: "libwidevinecdm.dylib",
+};
+
+/**
+ * A usable WidevineCdm folder has a manifest.json and the CDM library for
+ * this OS under _platform_specific/<os>_<arch>/. Browsers sometimes leave
+ * empty WidevineCdm folders behind, so we check before copying.
+ */
+export async function isValidWidevine(dir: string): Promise<boolean> {
+  if (!(await isFile(join(dir, "manifest.json")))) return false;
+
+  const library = WIDEVINE_LIBRARY[getPlatform()];
+  try {
+    const platformDirs = await readdir(join(dir, "_platform_specific"));
+    for (const platformDir of platformDirs) {
+      if (await isFile(join(dir, "_platform_specific", platformDir, library))) {
+        return true;
+      }
+    }
+  } catch {
+    // no _platform_specific folder (macOS .plugin layout) - manifest is enough
+    return getPlatform() === "darwin";
+  }
+  return false;
+}
+
 /**
  * List version folders (e.g. "143.0.7499.170") inside a directory, newest first.
  */
@@ -80,7 +118,11 @@ async function findInNewestVersion(
   for (const version of await listVersionDirs(baseDir)) {
     const candidate = join(baseDir, version, ...subPath);
     log.info(`Checking path: ${candidate}`);
-    if (await isDirectory(candidate)) {
+    const found =
+      subPath.at(-1) === "WidevineCdm"
+        ? await isValidWidevine(candidate)
+        : await isDirectory(candidate);
+    if (found) {
       log.info(`✓ Found: ${candidate}`);
       return candidate;
     }
@@ -147,8 +189,11 @@ function windowsProgramDirs(...subPath: string[]): string[] {
 async function findChromeWidevineWindows(
   chromeExe: string | null
 ): Promise<string | null> {
-  const appDirs = windowsProgramDirs("Google", "Chrome", "Application");
-  if (chromeExe) appDirs.unshift(dirname(chromeExe));
+  const appDirs = [
+    ...(chromeExe ? [dirname(chromeExe)] : []),
+    ...(await findAppPath("chrome.exe")).filter((dir) => !/helium/i.test(dir)),
+    ...windowsProgramDirs("Google", "Chrome", "Application"),
+  ];
 
   for (const appDir of new Set(appDirs)) {
     const found = await findInNewestVersion(appDir, "WidevineCdm");
@@ -205,7 +250,7 @@ async function findChromeWidevineLinux(
   for (const chromeDir of new Set(chromeDirs)) {
     const directPath = join(chromeDir, "WidevineCdm");
     log.info(`Checking path: ${directPath}`);
-    if (await isDirectory(directPath)) {
+    if (await isValidWidevine(directPath)) {
       log.info(`✓ Found WidevineCdm at: ${directPath}`);
       return directPath;
     }
@@ -218,29 +263,169 @@ async function findChromeWidevineLinux(
 }
 
 /**
- * Find Chrome's WidevineCdm directory on this machine.
+ * Widevine that Chromium browsers downloaded into their profile folders
+ * (<profile>/WidevineCdm/<version>/). Edge ships with every Windows install,
+ * so this often saves downloading Chrome.
+ */
+async function findWidevineInBrowserProfiles(): Promise<string | null> {
+  const home = getUserHome();
+  const profiles =
+    getPlatform() === "win32"
+      ? [
+          ["Google", "Chrome", "User Data"],
+          ["Microsoft", "Edge", "User Data"],
+          ["BraveSoftware", "Brave-Browser", "User Data"],
+          ["Vivaldi", "User Data"],
+          ["Chromium", "User Data"],
+        ].map((p) =>
+          join(process.env.LOCALAPPDATA || join(home, "AppData", "Local"), ...p)
+        )
+      : [
+          join(home, ".config", "google-chrome"),
+          join(home, ".config", "chromium"),
+          join(home, ".config", "microsoft-edge"),
+          join(home, ".config", "BraveSoftware", "Brave-Browser"),
+          join(home, ".config", "vivaldi"),
+          join(home, "snap", "chromium", "common", "chromium"),
+          join(home, ".var", "app", "com.google.Chrome", "config", "google-chrome"),
+          join(home, ".var", "app", "org.chromium.Chromium", "config", "chromium"),
+        ];
+
+  for (const profile of profiles) {
+    const found = await findInNewestVersion(join(profile, "WidevineCdm"));
+    if (found && (await isValidWidevine(found))) return found;
+  }
+  return null;
+}
+
+/**
+ * Find a WidevineCdm folder on this machine: Chrome's own copy first, then
+ * copies other Chromium browsers downloaded into their profiles.
  */
 export async function findChromeWidevinePath(): Promise<string | null> {
   const chromeExe = findChromeExecutable();
 
+  let found: string | null;
   switch (getPlatform()) {
     case "win32":
-      return findChromeWidevineWindows(chromeExe);
+      found = await findChromeWidevineWindows(chromeExe);
+      break;
     case "darwin":
       return findChromeWidevineMac(chromeExe);
     case "linux":
-      return findChromeWidevineLinux(chromeExe);
+      found = await findChromeWidevineLinux(chromeExe);
+      break;
+  }
+
+  return found ?? (await findWidevineInBrowserProfiles());
+}
+
+/**
+ * The folder holding chrome.dll in a Helium install - that is where Chromium
+ * looks for a bundled WidevineCdm. Installed Helium keeps it in
+ * Application\<version>\, the portable zip keeps it next to chrome.exe.
+ */
+async function findHeliumModuleDir(appDir: string): Promise<string | null> {
+  if (await isFile(join(appDir, "chrome.dll"))) return appDir;
+
+  const versions = await listVersionDirs(appDir);
+  for (const version of versions) {
+    if (await isFile(join(appDir, version, "chrome.dll"))) {
+      return join(appDir, version);
+    }
+  }
+  return versions[0] ? join(appDir, versions[0]) : null;
+}
+
+/**
+ * Portable Helium unpacked into a common folder,
+ * e.g. Downloads\helium_0.19.4.1_x64-windows\.
+ */
+async function findPortableHeliumDirs(): Promise<string[]> {
+  const home = homedir();
+  const roots = [
+    join(home, "Downloads"),
+    join(home, "Desktop"),
+    join(home, "Documents"),
+    home,
+    join(process.env.LOCALAPPDATA || join(home, "AppData", "Local"), "Programs"),
+    process.env.ProgramFiles || "C:\\Program Files",
+    "C:\\",
+  ];
+
+  const dirs: string[] = [];
+  for (const root of roots) {
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/helium/i.test(entry.name)) continue;
+      const dir = join(root, entry.name);
+      // The zip may have been extracted into a folder of the same name
+      for (const candidate of [dir, ...(await subDirs(dir))]) {
+        if (await isFile(join(candidate, "chrome.exe"))) dirs.push(candidate);
+      }
+    }
+  }
+  return dirs;
+}
+
+async function subDirs(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => join(dir, e.name));
+  } catch {
+    return [];
   }
 }
 
 /**
- * Find the newest Helium version folder, which receives WidevineCdm on
- * Windows and macOS. (Linux uses the profile folder instead - see
- * findHeliumUserDataDir.)
+ * Windows: find Helium from its usual install folders, the registry, a
+ * running Helium window, or a portable copy - in that order.
  */
-export async function findHeliumVersionPath(): Promise<string | null> {
+async function findHeliumWindows(): Promise<string | null> {
   const log = getLogger();
 
+  const sources: Array<[string, () => Promise<string[]>]> = [
+    ["install folders", async () => windowsProgramDirs("imput", "Helium", "Application")],
+    ["registry", () => findInstallLocations(/^Helium\b/i)],
+    [
+      "running processes",
+      async () =>
+        (await findRunningExecutables("chrome.exe"))
+          .filter((exe) => /helium/i.test(exe))
+          .map((exe) => dirname(exe)),
+    ],
+    ["portable folders", findPortableHeliumDirs],
+  ];
+
+  const checked = new Set<string>();
+  for (const [source, getDirs] of sources) {
+    log.info(`Looking for Helium in ${source}`);
+    for (const appDir of await getDirs()) {
+      if (checked.has(appDir.toLowerCase())) continue;
+      checked.add(appDir.toLowerCase());
+
+      log.info(`Checking Helium folder: ${appDir}`);
+      const moduleDir = await findHeliumModuleDir(appDir);
+      if (moduleDir) {
+        log.info(`✓ Found Helium at: ${moduleDir}`);
+        return moduleDir;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Find the Helium folder that receives WidevineCdm on Windows and macOS.
+ * (Linux uses the profile folder instead - see findHeliumUserDataDir.)
+ */
+export async function findHeliumVersionPath(): Promise<string | null> {
   if (getPlatform() === "darwin") {
     const versionsPath = join(
       "/Applications",
@@ -253,19 +438,53 @@ export async function findHeliumVersionPath(): Promise<string | null> {
     return findInNewestVersion(versionsPath, "Libraries");
   }
 
-  // Windows: per-user install first, then an install for all users
-  for (const appDir of windowsProgramDirs("imput", "Helium", "Application")) {
-    log.info(`Checking Helium base path: ${appDir}`);
-    const newest = (await listVersionDirs(appDir))[0];
-    if (newest) {
-      const versionPath = join(appDir, newest);
-      log.info(`✓ Found Helium version folder: ${versionPath}`);
-      return versionPath;
+  return findHeliumWindows();
+}
+
+/**
+ * Linux: is Helium installed? Checks distro packages (/opt/helium), the
+ * binary on PATH, and AppImages in the usual folders.
+ */
+export async function findHeliumLinuxInstall(): Promise<string | null> {
+  const log = getLogger();
+  const home = getUserHome();
+
+  const binaries = [
+    "/opt/helium/helium",
+    "/opt/helium-browser-bin/helium",
+    "/usr/bin/helium",
+    "/usr/bin/helium-browser",
+    join(home, ".local", "bin", "helium"),
+    ...(process.env.PATH ?? "").split(":").map((dir) => join(dir, "helium")),
+  ];
+  for (const binary of binaries) {
+    if (await isFile(binary)) {
+      log.info(`✓ Found Helium binary: ${binary}`);
+      return binary;
     }
-    log.info(`✗ No Helium version folder in: ${appDir}`);
+  }
+
+  for (const dir of ["Applications", "Downloads", "Desktop", ".local/bin", "bin", "AppImages"]) {
+    try {
+      const entries = await readdir(join(home, dir));
+      const appImage = entries.find((name) => /helium.*\.appimage$/i.test(name));
+      if (appImage) {
+        log.info(`✓ Found Helium AppImage: ${join(home, dir, appImage)}`);
+        return join(home, dir, appImage);
+      }
+    } catch {
+      // folder doesn't exist
+    }
   }
 
   return null;
+}
+
+/**
+ * Helium's profile folder on Linux, used when Helium has never been opened.
+ */
+export function getDefaultHeliumUserDataDir(): string {
+  return join(getUserHome(), ".config", "net.imput.helium");
 }
 
 /**
