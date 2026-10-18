@@ -196,7 +196,7 @@ function explainCopyError(error: unknown): void {
 
 function heliumNotFound(): never {
   console.log(chalk.red("\n✖ Helium browser not found"));
-  console.log(chalk.yellow("\n⚠️  Install Helium first: https://helium.is/"));
+  console.log(chalk.yellow("\n⚠️  Install Helium first: https://helium.computer/"));
   console.log(chalk.dim("   Installed somewhere unusual? Open Helium and run this again, or pass --helium-path.\n"));
   exit(1);
 }

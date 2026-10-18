@@ -2,7 +2,7 @@
 
 # 🔓 Helium DRM Fixer
 
-**Make DRM-protected video play in the [Helium browser](https://helium.is/) — with one line, on Windows and Linux.**
+**Make DRM-protected video play in the [Helium browser](https://helium.computer/) — with one line, on Windows and Linux.**
 
 It finds Widevine in the browsers and apps you already have (or downloads just Widevine from Google, ~20 MB), installs it into Helium in exactly the layout Helium expects, **proves it works by asking Helium itself**, and reopens Helium with your tabs. No paths to type, no files to copy by hand.
 
@@ -457,7 +457,7 @@ This tool gives Helium a working Widevine CDM. It does **not** change Helium's C
 <details>
 <summary><b>"Helium browser not found"</b></summary>
 
-Install Helium from [helium.is](https://helium.is/). If it's somewhere unusual, for example a portable copy on another drive:
+Install Helium from [helium.computer](https://helium.computer/). If it's somewhere unusual, for example a portable copy on another drive:
 
 - open Helium and run the tool again (it finds a running Helium), or
 - pass `--helium-path "D:\path\to\helium"`.
@@ -626,7 +626,7 @@ The code in this repository is released under the **[MIT License](LICENSE.md)**.
 
 ## 🙏 Credits
 
-- [**Helium**](https://helium.is/) by imput — the privacy-focused browser this tool is made for
+- [**Helium**](https://helium.computer/) by imput — the privacy-focused browser this tool is made for
 - [**Bun**](https://bun.sh/) — runtime and single-file compiler
 - [**Bush2021/chrome_installer**](https://github.com/Bush2021/chrome_installer) — offline Chrome installers used for the Windows download
 - [**7-Zip**](https://www.7-zip.org/) by Igor Pavlov — extraction on Windows
