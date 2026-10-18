@@ -124,9 +124,12 @@ export async function publishToWinget(token: string, version: string, wingetDir:
   const folder = `${PACKAGE_DIR}/${version}`;
 
   if (!inWinget && ours[0]) {
-    // First submission still under review: move it to this version
+    // First submission still under review: move it to this version.
+    // Add the new files BEFORE deleting the old ones - a pull request that
+    // changes nothing, even for a moment, is closed by the winget bot.
     const pr = ours[0];
     const branch = pr.head.ref as string;
+    await putFiles(gh, branch, folder, wingetDir, `New package: ${ID} version ${version}`);
     for (const file of await listFiles(gh, PACKAGE_DIR, branch)) {
       if (file.path.startsWith(`${folder}/`)) continue;
       await gh(`/repos/${USER}/winget-pkgs/contents/${file.path}`, {
@@ -134,7 +137,6 @@ export async function publishToWinget(token: string, version: string, wingetDir:
         body: JSON.stringify({ message: `Replace with version ${version}`, sha: file.sha, branch }),
       });
     }
-    await putFiles(gh, branch, folder, wingetDir, `New package: ${ID} version ${version}`);
     await gh(`/repos/${UPSTREAM}/pulls/${pr.number}`, {
       method: "PATCH",
       body: JSON.stringify({ title: `New package: ${ID} version ${version}`, body: prBody(version, true) }),
