@@ -13,8 +13,7 @@
   },
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest",
-    "pino-pretty": "^13.0.0"
+    "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -26,6 +25,7 @@
     "commander": "^12.1.0",
     "ora": "^9.0.0",
     "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
     "zod": "^3.22.4"
   }
 }

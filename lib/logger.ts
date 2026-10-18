@@ -1,4 +1,5 @@
 import pino from "pino";
+import pretty from "pino-pretty";
 
 export type LogLevel = "info" | "warn" | "error";
 
@@ -25,17 +26,17 @@ export function getLogger(): Logger {
 }
 
 export function createLogger(verbose: boolean): Logger {
+  // pino-pretty is used as a stream (not a worker transport) so it gets
+  // bundled into the compiled executable.
   const pinoLogger = verbose
-    ? pino({
-        transport: {
-          target: "pino-pretty",
-          options: {
-            colorize: true,
-            translateTime: "SYS:standard",
-            ignore: "pid,hostname",
-          },
-        },
-      })
+    ? pino(
+        pretty({
+          colorize: true,
+          translateTime: "SYS:standard",
+          ignore: "pid,hostname",
+          sync: true,
+        })
+      )
     : null;
 
   function log(level: LogLevel, message: string, data?: unknown) {
