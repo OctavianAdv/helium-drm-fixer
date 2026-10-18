@@ -27,6 +27,8 @@ const ASSETS = [
   "fix-helium-drm-windows-x64.exe",
   "fix-helium-drm-linux-x64",
   "fix-helium-drm-linux-arm64",
+  "fix-helium-drm-macos-x64",
+  "fix-helium-drm-macos-arm64",
 ];
 
 interface Release {
@@ -117,7 +119,7 @@ async function releaseNotes(tag: string): Promise<string> {
     `irm ${raw}/install.ps1 | iex`,
     "```",
     "",
-    "**Linux:**",
+    "**Linux and macOS:**",
     "",
     "```bash",
     `curl -fsSL ${raw}/install.sh | bash`,
@@ -136,8 +138,10 @@ async function releaseNotes(tag: string): Promise<string> {
     "| Windows (x64, also runs on ARM) | `fix-helium-drm-windows-x64.exe` |",
     "| Linux (x64) | `fix-helium-drm-linux-x64` |",
     "| Linux (ARM64) | `fix-helium-drm-linux-arm64` |",
+    "| macOS (Apple Silicon) | `fix-helium-drm-macos-arm64` |",
+    "| macOS (Intel) | `fix-helium-drm-macos-x64` |",
     "",
-    "On Linux, run `chmod +x` on it first. See the [README](https://github.com/" +
+    "On Linux and macOS, run `chmod +x` on it first. See the [README](https://github.com/" +
       REPO +
       "#quick-start) for details.",
   ].join("\n");
