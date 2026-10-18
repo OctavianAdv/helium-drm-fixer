@@ -263,61 +263,20 @@ async function findChromeWidevineLinux(
 }
 
 /**
- * Widevine that Chromium browsers downloaded into their profile folders
- * (<profile>/WidevineCdm/<version>/). Edge ships with every Windows install,
- * so this often saves downloading Chrome.
- */
-async function findWidevineInBrowserProfiles(): Promise<string | null> {
-  const home = getUserHome();
-  const profiles =
-    getPlatform() === "win32"
-      ? [
-          ["Google", "Chrome", "User Data"],
-          ["Microsoft", "Edge", "User Data"],
-          ["BraveSoftware", "Brave-Browser", "User Data"],
-          ["Vivaldi", "User Data"],
-          ["Chromium", "User Data"],
-        ].map((p) =>
-          join(process.env.LOCALAPPDATA || join(home, "AppData", "Local"), ...p)
-        )
-      : [
-          join(home, ".config", "google-chrome"),
-          join(home, ".config", "chromium"),
-          join(home, ".config", "microsoft-edge"),
-          join(home, ".config", "BraveSoftware", "Brave-Browser"),
-          join(home, ".config", "vivaldi"),
-          join(home, "snap", "chromium", "common", "chromium"),
-          join(home, ".var", "app", "com.google.Chrome", "config", "google-chrome"),
-          join(home, ".var", "app", "org.chromium.Chromium", "config", "chromium"),
-        ];
-
-  for (const profile of profiles) {
-    const found = await findInNewestVersion(join(profile, "WidevineCdm"));
-    if (found && (await isValidWidevine(found))) return found;
-  }
-  return null;
-}
-
-/**
- * Find a WidevineCdm folder on this machine: Chrome's own copy first, then
- * copies other Chromium browsers downloaded into their profiles.
+ * Find the WidevineCdm bundled with Google Chrome.
+ * (Other browsers and apps: see lib/widevine.ts.)
  */
 export async function findChromeWidevinePath(): Promise<string | null> {
   const chromeExe = findChromeExecutable();
 
-  let found: string | null;
   switch (getPlatform()) {
     case "win32":
-      found = await findChromeWidevineWindows(chromeExe);
-      break;
+      return findChromeWidevineWindows(chromeExe);
     case "darwin":
       return findChromeWidevineMac(chromeExe);
     case "linux":
-      found = await findChromeWidevineLinux(chromeExe);
-      break;
+      return findChromeWidevineLinux(chromeExe);
   }
-
-  return found ?? (await findWidevineInBrowserProfiles());
 }
 
 /**
