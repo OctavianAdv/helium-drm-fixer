@@ -5,6 +5,8 @@
  *
  *   bun run release            release the version in package.json
  *   bun run release patch      bump 1.0.0 -> 1.0.1, then release (also: minor, major, 1.2.3)
+ *   bun run release patch --no-winget
+ *                              same, but don't open the winget pull request
  *   bun run release --upload v1.0.0
  *                              only build and upload to the release for an
  *                              existing tag (used by GitHub Actions)
@@ -16,6 +18,7 @@ import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { writePackaging } from "./packaging";
+import { publishToWinget } from "./winget";
 
 const REPO = "OctavianAdv/helium-drm-fixer";
 const API = `https://api.github.com/repos/${REPO}`;
@@ -197,7 +200,9 @@ async function publish(token: string, tag: string, files: string[]): Promise<voi
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const allArgs = process.argv.slice(2);
+  const skipWinget = allArgs.includes("--no-winget");
+  const args = allArgs.filter((a) => a !== "--no-winget");
   const token = await getToken();
 
   // CI mode: the tag already exists, just build and upload
@@ -259,6 +264,15 @@ async function main() {
   await $`git push --quiet origin main ${tag}`;
 
   await publish(token, tag, files);
+
+  if (!skipWinget) {
+    step("Submitting to winget");
+    try {
+      console.log(`  ${await publishToWinget(token, version, join("packaging", "winget"))}`);
+    } catch (error) {
+      console.log(`  ⚠️  winget submission failed (the GitHub release is fine): ${error instanceof Error ? error.message : error}`);
+    }
+  }
 }
 
 await main();
