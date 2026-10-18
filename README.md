@@ -120,14 +120,15 @@ bun run build:all   # Build Windows x64, Linux x64 and Linux ARM64 executables i
 
 ### Releasing
 
-Bump `version` in `package.json`, commit, then push a tag:
+One command does the whole flow:
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+bun run release patch   # 1.0.0 -> 1.0.1 (or: minor, major, 1.2.3)
 ```
 
-GitHub Actions builds the Windows and Linux executables and attaches them to a new release.
+It checks that everything is committed and up to date, runs the type check and tests, bumps the version in `package.json`, and builds the Windows and Linux executables with SHA-256 checksums. Then it commits, tags and pushes, and creates the GitHub release: notes come from the `feat:` / `fix:` commits since the last release, with the executables attached.
+
+It uses the GitHub login git already saved (or a `GITHUB_TOKEN`). Pushing a `v*` tag also makes GitHub Actions rebuild the same files and re-upload them to that release. You can also run that from the Actions tab for any tag.
 
 ## License
 
