@@ -69,6 +69,17 @@ export async function detectLibraryArch(libraryPath: string): Promise<"x64" | "a
       return machine === 0x8664 ? "x64" : machine === 0xaa64 ? "arm64" : machine === 0x14c ? "x86" : null;
     }
 
+    // Mach-O (macOS): 64-bit thin binary, or a universal ("fat") binary
+    const magic = header.readUInt32LE(0);
+    if (magic === 0xfeedfacf) {
+      return machCpu(header.readUInt32LE(4));
+    }
+    if (header.readUInt32BE(0) === 0xcafebabe) {
+      const count = header.readUInt32BE(4);
+      const cpus = Array.from({ length: Math.min(count, 20) }, (_, i) => machCpu(header.readUInt32BE(8 + i * 20)));
+      return cpus.includes(getArch()) ? getArch() : cpus.find(Boolean) ?? null;
+    }
+
     if (header.toString("latin1", 0, 4) === "\x7fELF") {
       const machine = header.readUInt16LE(0x12);
       return machine === 62 ? "x64" : machine === 183 ? "arm64" : machine === 3 ? "x86" : null;
@@ -79,6 +90,10 @@ export async function detectLibraryArch(libraryPath: string): Promise<"x64" | "a
     await file?.close();
   }
   return null;
+}
+
+function machCpu(cpuType: number): "x64" | "arm64" | null {
+  return cpuType === 0x01000007 ? "x64" : cpuType === 0x0100000c ? "arm64" : null;
 }
 
 /**
@@ -227,6 +242,65 @@ function windowsLocations(): Location[] {
   ];
 }
 
+/** Widevine bundled inside .app bundles: <App>.app/Contents/Frameworks/<X>.framework/Versions/<v>/Libraries/WidevineCdm */
+async function macBundledCopies(appsDirs: string[]): Promise<Location[]> {
+  const locations: Location[] = [];
+  for (const appsDir of appsDirs) {
+    for (const app of await matchingDirs(appsDir, /\.app$/i)) {
+      for (const framework of await matchingDirs(join(app, "Contents", "Frameworks"), /\.framework$/i)) {
+        const versions = join(framework, "Versions");
+        const copies = (await listVersionDirs(versions)).map((v) => join(versions, v, "Libraries", "WidevineCdm"));
+        if (copies.length) locations.push([basename(app).replace(/\.app$/i, ""), async () => copies]);
+      }
+    }
+  }
+  return locations;
+}
+
+async function macLocations(): Promise<Location[]> {
+  const home = getUserHome();
+  const support = join(home, "Library", "Application Support");
+  const chromium = (name: string, ...userDataDirs: string[]): Location => [
+    name,
+    async () => (await Promise.all(userDataDirs.map((d) => profileCopies(join(support, d))))).flat(),
+  ];
+  const firefox = (name: string, ...roots: string[]): Location => [
+    name,
+    async () => (await Promise.all(roots.map((r) => firefoxCopies(join(support, r))))).flat(),
+  ];
+
+  return [
+    ["Google Chrome", async () => {
+      const installed = await findChromeWidevinePath();
+      return [...(installed ? [installed] : []), ...(await profileCopies(join(support, "Google", "Chrome")))];
+    }],
+    chromium("Chrome Beta", "Google/Chrome Beta"),
+    chromium("Chrome Dev", "Google/Chrome Dev"),
+    chromium("Chrome Canary", "Google/Chrome Canary"),
+    chromium("Microsoft Edge", "Microsoft Edge"),
+    chromium("Edge Beta", "Microsoft Edge Beta"),
+    chromium("Edge Dev", "Microsoft Edge Dev"),
+    chromium("Edge Canary", "Microsoft Edge Canary"),
+    chromium("Brave", "BraveSoftware/Brave-Browser"),
+    chromium("Brave Beta", "BraveSoftware/Brave-Browser-Beta"),
+    chromium("Brave Nightly", "BraveSoftware/Brave-Browser-Nightly"),
+    chromium("Vivaldi", "Vivaldi"),
+    chromium("Opera", "com.operasoftware.Opera"),
+    chromium("Opera GX", "com.operasoftware.OperaGX"),
+    chromium("Arc", "Arc/User Data"),
+    chromium("Yandex Browser", "Yandex/YandexBrowser"),
+    chromium("Chromium", "Chromium"),
+    chromium("Thorium", "Thorium"),
+    firefox("Firefox", "Firefox/Profiles"),
+    firefox("LibreWolf", "librewolf/Profiles"),
+    firefox("Waterfox", "Waterfox/Profiles"),
+    firefox("Floorp", "Floorp/Profiles"),
+    firefox("Zen Browser", "zen/Profiles"),
+    chromium("Spotify", "Spotify"),
+    ...(await macBundledCopies(["/Applications", join(home, "Applications")])),
+  ];
+}
+
 function linuxLocations(): Location[] {
   const home = getUserHome();
   const config = join(home, ".config");
@@ -337,7 +411,9 @@ function appNameFromPath(root: string, dir: string): string {
 async function appLocations(): Promise<Location[]> {
   const home = getUserHome();
   const roots =
-    getPlatform() === "win32"
+    getPlatform() === "darwin"
+      ? [[join(home, "Library", "Application Support"), 4] as const]
+      : getPlatform() === "win32"
       ? [
           [process.env.LOCALAPPDATA || join(home, "AppData", "Local"), 5] as const,
           [process.env.APPDATA || join(home, "AppData", "Roaming"), 4] as const,
@@ -406,13 +482,9 @@ export async function findWidevineSources(
   const sources: WidevineSource[] = [];
   const seen = new Set<string>();
 
-  if (getPlatform() === "darwin") {
-    const chrome = await findChromeWidevinePath();
-    const source = chrome ? await readWidevine(chrome, "Google Chrome", arch) : null;
-    return source ? [source] : [];
-  }
-
-  await collect(getPlatform() === "win32" ? windowsLocations() : linuxLocations(), sources, seen, arch);
+  const locations =
+    getPlatform() === "darwin" ? await macLocations() : getPlatform() === "win32" ? windowsLocations() : linuxLocations();
+  await collect(locations, sources, seen, arch);
   if (options.includeApps || sources.length === 0) {
     await collect(await appLocations(), sources, seen, arch);
   }

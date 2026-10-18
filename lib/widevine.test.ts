@@ -45,6 +45,21 @@ describe('widevine', () => {
       }
     });
 
+    it('should read the CPU from macOS Mach-O headers, thin and universal', async () => {
+      const thin = Buffer.alloc(64);
+      thin.writeUInt32LE(0xfeedfacf, 0);
+      thin.writeUInt32LE(0x0100000c, 4); // arm64
+      await writeFile(join(dir, 'thin'), thin);
+      expect(await detectLibraryArch(join(dir, 'thin'))).toBe('arm64');
+
+      const fat = Buffer.alloc(64);
+      fat.writeUInt32BE(0xcafebabe, 0);
+      fat.writeUInt32BE(1, 4); // one architecture
+      fat.writeUInt32BE(0x01000007, 8); // x86_64
+      await writeFile(join(dir, 'fat'), fat);
+      expect(await detectLibraryArch(join(dir, 'fat'))).toBe('x64');
+    });
+
     it('should return null for unknown files', async () => {
       await writeFile(join(dir, 'text'), 'hello');
       expect(await detectLibraryArch(join(dir, 'text'))).toBeNull();

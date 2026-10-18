@@ -136,15 +136,32 @@ async function closeRunningHelium(
   logger: Logger,
   action: string
 ): Promise<string | null> {
-  if (getPlatform() !== "win32") return null;
+  const platform = getPlatform();
+  if (platform === "linux") return null; // nothing is locked; Helium just needs a restart
 
-  const prefix = heliumAppRoot(install).toLowerCase() + "\\";
-  const running = (await findRunningProcesses("chrome.exe")).filter((p) =>
-    p.path.toLowerCase().startsWith(prefix)
-  );
-  if (!running.length) return null;
+  let pids: number[];
+  let reopen: string;
+  if (platform === "darwin") {
+    if (!install.appBundle) return null;
+    pids = await macHeliumPids(install.appBundle);
+    reopen = `mac:${install.appBundle}`;
+  } else {
+    const prefix = heliumAppRoot(install).toLowerCase() + "\\";
+    const running = (await findRunningProcesses("chrome.exe")).filter((p) =>
+      p.path.toLowerCase().startsWith(prefix)
+    );
+    pids = running.map((p) => p.pid);
+    const main = running.find((p) => !p.commandLine.includes("--type=")) ?? running[0];
+    // Reopen with the same arguments, and bring the tabs back
+    reopen = !main
+      ? ""
+      : main.commandLine.includes("--restore-last-session")
+        ? main.commandLine
+        : `${main.commandLine} --restore-last-session`;
+  }
+  if (!pids.length) return null;
 
-  logger.info(`Helium is running (${running.length} processes)`);
+  logger.info(`Helium is running (${pids.length} processes)`);
   if (!options.yes) {
     if (!process.stdin.isTTY) {
       console.log(chalk.yellow("\n⚠️  Helium is open. If this fails, close Helium or run with --yes.\n"));
@@ -160,19 +177,43 @@ async function closeRunningHelium(
   }
 
   const spinner = ora("Closing Helium...").start();
-  const main = running.find((p) => !p.commandLine.includes("--type=")) ?? running[0]!;
-  await closeProcesses(running.map((p) => p.pid));
+  if (platform === "darwin") await quitMacApp(install.appBundle!, pids);
+  else await closeProcesses(pids);
   spinner.succeed(chalk.green("Closed Helium"));
+  return reopen;
+}
 
-  // Reopen with the same arguments, and bring the tabs back
-  return main.commandLine.includes("--restore-last-session")
-    ? main.commandLine
-    : `${main.commandLine} --restore-last-session`;
+/** macOS: process IDs of a Helium.app (main process and helpers). */
+async function macHeliumPids(app: string): Promise<number[]> {
+  try {
+    const { stdout } = await execFileAsync("pgrep", ["-f", `${app}/Contents/`]);
+    return stdout.split("\n").map(Number).filter((pid) => pid && pid !== process.pid);
+  } catch {
+    return []; // pgrep exits 1 when nothing matches
+  }
+}
+
+/** macOS: quit like Cmd+Q (so the session is saved), force only after 10 seconds. */
+async function quitMacApp(app: string, pids: number[]): Promise<void> {
+  await execFileAsync("osascript", ["-e", `tell application "${app.replace(/"/g, '\\"')}" to quit`]).catch(() => {});
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline && (await macHeliumPids(app)).length) await Bun.sleep(250);
+  for (const pid of await macHeliumPids(app)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // already gone
+    }
+  }
+  void pids;
 }
 
 async function reopenHelium(commandLine: string, logger: Logger): Promise<void> {
   logger.info(`Reopening Helium: ${commandLine}`);
-  await startIndependentProcess(commandLine).catch((error) => {
+  const start = commandLine.startsWith("mac:")
+    ? execFileAsync("open", ["-a", commandLine.slice(4), "--args", "--restore-last-session"]).then(() => {})
+    : startIndependentProcess(commandLine);
+  await start.catch((error) => {
     logger.error("Failed to reopen Helium", { error });
     console.log(chalk.yellow("\n⚠️  Couldn't reopen Helium - please start it yourself.\n"));
   });
@@ -297,7 +338,7 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
       }
     }
 
-    if (getPlatform() === "darwin") await resignMac(logger);
+    if (getPlatform() === "darwin" && install.appBundle) await resignMac(install.appBundle, logger);
     if (reopen) await reopenHelium(reopen, logger);
     if (reopen) console.log(chalk.dim("  Helium has been reopened."));
   }
@@ -312,17 +353,20 @@ async function fix(options: FixHeliumDrmOptions, logger: Logger): Promise<void> 
   console.log(chalk.bold.green(`\n✅ Done! DRM is enabled in Helium.${restart}\n`));
 }
 
-async function resignMac(logger: Logger): Promise<void> {
+/**
+ * macOS: adding files to Helium.app breaks its code signature, so re-sign it
+ * (ad hoc). Without this, macOS refuses to load Widevine or start Helium.
+ */
+async function resignMac(app: string, logger: Logger): Promise<void> {
   const spinner = ora("Re-signing Helium.app to include WidevineCdm...").start();
   try {
-    const app = "/Applications/Helium.app";
     await execFileAsync("xattr", ["-cr", app]);
     await execFileAsync("codesign", ["--force", "--deep", "--sign", "-", app]);
     spinner.succeed(chalk.green("Helium.app re-signed"));
   } catch (error) {
     spinner.fail(chalk.red("Failed to re-sign Helium.app"));
     logger.error("Failed to re-sign Helium.app", { error });
-    console.log(chalk.dim('   Try: sudo codesign --force --deep --sign - "/Applications/Helium.app"\n'));
+    console.log(chalk.dim(`   Try: sudo codesign --force --deep --sign - "${app}"\n`));
   }
 }
 
@@ -383,7 +427,7 @@ async function status(options: FixHeliumDrmOptions, version: string): Promise<vo
   }
   if (google) console.log(`  Newest from Google: ${google.version}`);
 
-  if (getPlatform() === "win32") {
+  if (getPlatform() !== "linux") {
     const auto = await isAutoFixEnabled();
     console.log(chalk.bold("\nAuto-fix after Helium updates"));
     console.log(auto ? `  ${chalk.green("On")}  ${chalk.dim(`log: ${autoFixLog()}`)}` : `  Off ${chalk.dim("(turn on with --auto)")}`);
@@ -403,6 +447,7 @@ async function undo(options: FixHeliumDrmOptions, logger: Logger): Promise<void>
     const reopen = await closeRunningHelium(install, options, logger, "remove the fix");
     try {
       const removed = await removeFromHelium(install);
+      if (getPlatform() === "darwin" && install.appBundle) await resignMac(install.appBundle, logger);
       console.log(`${chalk.green("✔")} Removed ${chalk.dim(removed ?? "")}`);
     } catch (error) {
       console.log(`${chalk.red("✖")} Couldn't remove Widevine`);
@@ -416,7 +461,7 @@ async function undo(options: FixHeliumDrmOptions, logger: Logger): Promise<void>
 
 async function setAuto(state: boolean | string): Promise<void> {
   const off = typeof state === "string" && /^(off|false|no|disable)$/i.test(state);
-  if (getPlatform() !== "win32") {
+  if (getPlatform() === "linux") {
     console.log(chalk.green("\n✔ Not needed on Linux: the fix lives in your Helium profile and survives Helium updates.\n"));
     return;
   }
@@ -457,7 +502,12 @@ async function autoRun(logger: Logger): Promise<void> {
     try {
       const source = await chooseWidevine(install.arch, logger, ora({ isEnabled: false }), {});
       if (current && compareVersions(current.version, source.version) >= 0) continue;
+      if (getPlatform() === "darwin" && install.appBundle && (await macHeliumPids(install.appBundle)).length) {
+        await autoLog(`Helium is running - will fix ${install.dir} after it closes`);
+        continue;
+      }
       await installIntoHelium(install, source);
+      if (getPlatform() === "darwin" && install.appBundle) await resignMac(install.appBundle, logger);
       await autoLog(`Installed ${describe(source)} into ${install.dir}`);
     } catch (error) {
       await autoLog(`Couldn't fix ${install.dir}: ${errorMessage(error)} (will retry)`);

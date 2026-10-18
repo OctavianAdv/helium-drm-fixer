@@ -9,20 +9,29 @@ import { getLogger } from "./logger";
 const execFileAsync = promisify(execFile);
 
 /**
- * Windows auto-fix: Helium installs each update into a new version folder
- * without Widevine. A hidden scheduled task (at logon and every hour) runs a
- * window-less copy of the fixer, which re-applies the fix when needed.
- * No administrator rights are needed.
+ * Auto-fix after Helium updates. No administrator rights are needed.
+ *
+ * - Windows: Helium installs each update into a new version folder without
+ *   Widevine. A hidden scheduled task (at logon and every hour) runs a
+ *   window-less copy of the fixer, which re-applies the fix when needed.
+ * - macOS: an update replaces Helium.app, removing Widevine. A LaunchAgent
+ *   (at login and every hour) does the same.
+ * - Linux: not needed - the fix lives in the Helium profile.
  */
 
 export const TASK_NAME = "Helium DRM Fixer";
 const REPO = "OctavianAdv/helium-drm-fixer";
 
+const MAC_LABEL = "com.octavianadv.helium-drm-fixer";
+const macPlist = () => join(homedir(), "Library", "LaunchAgents", `${MAC_LABEL}.plist`);
+
 export function autoFixDir(): string {
+  if (process.platform === "darwin") return join(homedir(), "Library", "Application Support", "helium-drm-fixer");
   return join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "helium-drm-fixer");
 }
 
-export const autoFixExe = () => join(autoFixDir(), "fix-helium-drm-auto.exe");
+export const autoFixExe = () =>
+  join(autoFixDir(), process.platform === "win32" ? "fix-helium-drm-auto.exe" : "fix-helium-drm");
 export const autoFixLog = () => join(autoFixDir(), "auto-fix.log");
 
 /** True when running as a compiled executable (not `bun cli.ts`). */
@@ -80,6 +89,7 @@ function taskXml(command: string): string {
 }
 
 export async function isAutoFixEnabled(): Promise<boolean> {
+  if (process.platform === "darwin") return Bun.file(macPlist()).exists();
   try {
     await execFileAsync("schtasks", ["/Query", "/TN", TASK_NAME], { windowsHide: true });
     return true;
@@ -88,7 +98,44 @@ export async function isAutoFixEnabled(): Promise<boolean> {
   }
 }
 
+async function enableMac(): Promise<void> {
+  const log = getLogger();
+  await mkdir(autoFixDir(), { recursive: true });
+  let source = process.execPath;
+  if (!isCompiled()) {
+    const asset = `fix-helium-drm-macos-${process.arch === "arm64" ? "arm64" : "x64"}`;
+    source = join(tmpdir(), asset);
+    await downloadFile(`https://github.com/${REPO}/releases/latest/download/${asset}`, source, { logger: log });
+  }
+  await Bun.write(autoFixExe(), Bun.file(source));
+  await execFileAsync("chmod", ["+x", autoFixExe()]);
+  await execFileAsync("codesign", ["--force", "--sign", "-", autoFixExe()]).catch(() => {});
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${MAC_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array><string>${autoFixExe()}</string><string>--auto-run</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+</dict>
+</plist>
+`;
+  await mkdir(join(homedir(), "Library", "LaunchAgents"), { recursive: true });
+  await writeFile(macPlist(), plist);
+  const domain = `gui/${process.getuid?.() ?? 501}`;
+  await execFileAsync("launchctl", ["bootout", `${domain}/${MAC_LABEL}`]).catch(() => {});
+  await execFileAsync("launchctl", ["bootstrap", domain, macPlist()]).catch(() =>
+    execFileAsync("launchctl", ["load", "-w", macPlist()])
+  );
+}
+
 export async function enableAutoFix(): Promise<void> {
+  if (process.platform === "darwin") return enableMac();
   const log = getLogger();
   await mkdir(autoFixDir(), { recursive: true });
 
@@ -118,6 +165,14 @@ export async function enableAutoFix(): Promise<void> {
 }
 
 export async function disableAutoFix(): Promise<void> {
+  if (process.platform === "darwin") {
+    await execFileAsync("launchctl", ["bootout", `gui/${process.getuid?.() ?? 501}/${MAC_LABEL}`]).catch(() =>
+      execFileAsync("launchctl", ["unload", "-w", macPlist()]).catch(() => {})
+    );
+    await rm(macPlist(), { force: true });
+    await rm(autoFixDir(), { recursive: true, force: true });
+    return;
+  }
   await execFileAsync("schtasks", ["/Delete", "/TN", TASK_NAME, "/F"], { windowsHide: true }).catch(() => {});
   await rm(autoFixDir(), { recursive: true, force: true });
 }
