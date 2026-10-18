@@ -1,0 +1,68 @@
+name: End-to-end
+
+# Downloads the real Helium browser, runs the fixer on it, and lets Helium
+# itself confirm that Widevine DRM works (the fixer exits with 2 if it can't).
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # every Monday: catch Helium or Widevine changes
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows (portable Helium)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+      - run: bun install --frozen-lockfile
+
+      - name: Download portable Helium
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod https://api.github.com/repos/imputnet/helium-windows/releases/latest
+          $asset = $release.assets | Where-Object { $_.name -like '*x64-windows.zip' } | Select-Object -First 1
+          Invoke-WebRequest $asset.browser_download_url -OutFile helium.zip
+          Expand-Archive helium.zip -DestinationPath helium
+          $dir = (Get-ChildItem helium -Directory | Select-Object -First 1).FullName
+          "HELIUM_DIR=$dir" >> $env:GITHUB_ENV
+
+      - name: Fix with Widevine downloaded from Google, and verify
+        run: bun run cli.ts --force-download --yes --helium-path "${{ env.HELIUM_DIR }}"
+
+      - name: Fix again with a local copy (Chrome on the runner), and verify
+        run: bun run cli.ts --reinstall --yes --helium-path "${{ env.HELIUM_DIR }}"
+
+      - name: Undo
+        run: bun run cli.ts --undo --yes --helium-path "${{ env.HELIUM_DIR }}"
+
+  linux:
+    name: Linux (Helium tarball)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+      - run: bun install --frozen-lockfile
+
+      - name: Download Helium
+        run: |
+          url=$(curl -fsSL https://api.github.com/repos/imputnet/helium-linux/releases/latest \
+            | grep -o '"browser_download_url": *"[^"]*x86_64_linux.tar.xz"' | cut -d'"' -f4)
+          curl -fsSL "$url" -o helium.tar.xz
+          mkdir helium && tar -xf helium.tar.xz -C helium --strip-components=1
+          echo "$PWD/helium" >> "$GITHUB_PATH"
+
+      - name: Fix with Widevine downloaded from Google, and verify
+        run: bun run cli.ts --force-download --helium-path "$HOME/.config/net.imput.helium"
+
+      - name: Status
+        run: bun run cli.ts --status --helium-path "$HOME/.config/net.imput.helium"
+
+      - name: Undo
+        run: bun run cli.ts --undo --helium-path "$HOME/.config/net.imput.helium"
