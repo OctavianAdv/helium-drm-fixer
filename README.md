@@ -2,14 +2,15 @@
 
 # 🔓 Helium DRM Fixer
 
-**Make DRM-protected video play in the [Helium browser](https://helium.computer/) — with one line, on Windows and Linux.**
+**Make DRM-protected video play in the [Helium browser](https://helium.computer/) — with one line or one click, on Windows, macOS and Linux.**
 
 It finds Widevine in the browsers and apps you already have (or downloads just Widevine from Google, ~20 MB), installs it into Helium in exactly the layout Helium expects, **proves it works by asking Helium itself**, and reopens Helium with your tabs. No paths to type, no files to copy by hand.
 
 [![Latest release](https://img.shields.io/github/v/release/OctavianAdv/helium-drm-fixer?label=release&color=2ea44f)](https://github.com/OctavianAdv/helium-drm-fixer/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/OctavianAdv/helium-drm-fixer/total?color=blue)](https://github.com/OctavianAdv/helium-drm-fixer/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE.md)
-![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-lightgrey)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![Languages](https://img.shields.io/badge/languages-8-blueviolet)
 ![Built with Bun](https://img.shields.io/badge/built%20with-Bun-f9f1e1?logo=bun&logoColor=black)
 
 </div>
@@ -24,11 +25,13 @@ It finds Widevine in the browsers and apps you already have (or downloads just W
 irm https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.ps1 | iex
 ```
 
-**Linux** — open a terminal and paste:
+**macOS and Linux** — open a terminal and paste:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.sh | bash
 ```
+
+**Prefer buttons?** Download `fix-helium-drm-windows-x64.exe` from the [latest release](https://github.com/OctavianAdv/helium-drm-fixer/releases/latest) and double-click it: a small window opens with a big **Fix Helium** button. (On any system: `fix-helium-drm --gui`.)
 
 **Scoop** (Windows), to keep it installed:
 
@@ -55,7 +58,7 @@ Helium is open. Close it now to apply the fix? It will reopen afterwards. [Y/n] 
 ✅ Done! DRM is enabled in Helium.
 ```
 
-Want it to stay fixed after Helium updates? Run it once with `--auto` (Windows).
+Want it to stay fixed after Helium updates? Run it once with `--auto` (Windows and macOS). It speaks your language too: English, Română, Español, Deutsch, Français, Português, Italiano and Русский.
 
 ---
 
@@ -101,7 +104,9 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 
 | | Copying by hand | A typical fix script | **Helium DRM Fixer** |
 | --- | :---: | :---: | :---: |
-| Works on Windows **and** Linux | ✅ if you know the paths | Usually one OS | ✅ **Both, same command** |
+| Works on Windows, macOS **and** Linux | ✅ if you know the paths | Usually one OS | ✅ **All three, same command** |
+| A window with buttons, for people who avoid terminals | – | ❌ | ✅ **Double-click the .exe, or `--gui`** |
+| Speaks your language | – | ❌ | ✅ **8 languages, picked from your system** |
 | One-line install, nothing left behind | ❌ | Rarely | ✅ `irm … \| iex` / `curl … \| bash` |
 | Download is verified (SHA-256) | – | Rarely | ✅ **Every run** |
 | Finds Helium without you typing a path | ❌ | Fixed paths only | ✅ **Installer, registry, running window, portable zip, AppImage** |
@@ -109,9 +114,9 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 | Downloads **only Widevine** when needed | ❌ | Whole Chrome (~500 MB) | ✅ **~20 MB straight from Google, with Mozilla and Chrome as fallbacks** |
 | **Proves** DRM works afterwards | ❌ | ❌ | ✅ **Asks Helium itself, invisibly, in about a second** |
 | Stays fixed after Helium updates | ❌ | ❌ | ✅ **`--auto` re-applies it in the background (Windows); Linux never loses it** |
-| ARM64 support | – | Rarely | ✅ **Windows and Linux ARM64, matched to Helium's own CPU** |
+| ARM64 support | – | Rarely | ✅ **Apple Silicon, Windows ARM64 and Linux ARM64, matched to Helium's own CPU** |
 | Status, undo, fix every copy | ❌ | ❌ | ✅ `--status`, `--undo`, `--all` |
-| Package managers | – | – | ✅ **Scoop today; winget and AUR manifests ready** |
+| Package managers | – | – | ✅ **Scoop today; winget submitted (and updated automatically on every release); AUR ready** |
 | Picks the **newest** Widevine you have | ❌ | ❌ | ✅ |
 | Rejects broken or wrong-CPU copies | ❌ | ❌ | ✅ **Checks the manifest, the library and its CPU type** |
 | Converts Firefox's Widevine for Helium | ❌ | ❌ | ✅ |
@@ -141,7 +146,10 @@ There are a few ways to get Widevine into Helium. Here is how they compare:
 - **Stays fixed (Windows).** `--auto` installs a hidden scheduled task (at logon and every hour, no admin rights needed) that re-applies the fix when a Helium update arrives. `--auto off` removes it completely. On Linux the fix lives in your profile and survives updates by itself.
 - **Matches Helium's CPU.** It reads whether Helium is x64 or ARM64 from Helium's own files and picks or downloads the matching Widevine, including on Windows on ARM and ARM64 Linux.
 - **Status, undo and multiple installs.** `--status` shows each Helium, its Widevine version and whether DRM works. `--undo` removes the fix cleanly. `--all` fixes every Helium it finds (installed and portable). Already up to date? It says so and doesn't touch Helium.
-- **Double-click friendly.** Started from Explorer, the window stays open until you press Enter, so you can read the result.
+- **A window version.** Double-click the Windows `.exe` (or run `--gui` anywhere) and a small app window opens: each Helium with a green "DRM works" badge, a big **Fix Helium** button, a Widevine source picker, **Remove the fix**, an auto-fix switch and a live log. It uses an app-style window from Edge (Windows) or Chrome/Brave/Chromium (macOS, Linux) — never Helium itself, since Helium may need to be closed. It talks only to `127.0.0.1`, refuses requests from any other website, and exits when you close the window.
+- **Speaks your language.** English, Romanian, Spanish, German, French, Portuguese, Italian and Russian, taken from your Windows/macOS display language or `LANG` on Linux. Choose with `--lang ro` (or `HELIUM_DRM_FIXER_LANG`), or from the menu in the window.
+- **macOS too.** Finds Helium.app (in Applications, a running copy, or through Spotlight), takes Widevine from 20+ Mac browsers, re-signs Helium after the change so macOS accepts it, closes and reopens Helium with your tabs, and `--auto` uses a LaunchAgent to re-apply the fix after Helium updates.
+- **Double-click friendly.** If the window can't open, the console stays open until you press Enter, so you can read the result.
 - **Tells you about updates.** When a newer version of the fixer exists, it says so at the end (never when run through the always-latest one-liners).
 - **Friendly, honest errors.** Locked files, missing permissions, no Helium, no Widevine: each one gets a plain-language explanation of what to do next.
 - **Safe to explore.** `--status`, `--check`, `--dry-run` and `--list-sources` never change anything.
@@ -219,9 +227,13 @@ Also tested on Windows:
 - **`--auto`:** task created without admin rights, window-less, and it re-installed Widevine after a simulated Helium update.
 - **`--all`:** two portable Heliums open at once; both found, closed, fixed, verified and reopened.
 - **`--status`, `--undo`, `--offline`, `--latest`, `--reinstall`**, and the double-click pause.
+- **The window version:** double-clicking the compiled `.exe` opened the app window with the console hidden. "Remove the fix" and "Fix Helium" (with Spotify's Widevine) worked from it, including closing and reopening a running Helium, and the program exited when the window was closed. Requests from other websites are refused.
+- **Languages:** the full fix and status runs checked in Romanian, German, Russian, French and Spanish; a test makes sure every translation keeps the right placeholders.
 - **Auto-detection** of a running portable Helium, with no paths given.
 - **Close → fix → reopen**, including a second run while Widevine was in use.
 - **Compiled `.exe` without `node_modules`**, including the Chrome download and 7-Zip extraction.
+
+On **macOS**, the layout comes from the real Helium 0.19.4.1 `.dmg`: Widevine goes in `Helium Framework.framework/Versions/<version>/Libraries/WidevineCdm`, and the CPU type is read correctly from Helium's own program and from Google's Mac Widevine package (both tested). The fix itself has not yet been run on a real Mac — reports are very welcome.
 
 On Linux, the download, `.deb` extraction and profile-folder logic run in simulation and in unit tests. An automated end-to-end test (real Helium, fix, verify, undo) is set up to run on every change and weekly. Reports from real Linux machines are very welcome: [open an issue](https://github.com/OctavianAdv/helium-drm-fixer/issues).
 
@@ -244,7 +256,7 @@ With [options](#%EF%B8%8F-options):
 ```
 
 ```bash
-# Linux
+# macOS and Linux
 curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/install.sh | bash -s -- --list-sources
 ```
 
@@ -270,6 +282,8 @@ Get the file for your system from the [latest release](https://github.com/Octavi
 | Windows (x64, also runs on ARM through emulation) | `fix-helium-drm-windows-x64.exe` |
 | Linux (x64) | `fix-helium-drm-linux-x64` |
 | Linux (ARM64) | `fix-helium-drm-linux-arm64` |
+| macOS (Apple Silicon) | `fix-helium-drm-macos-arm64` |
+| macOS (Intel) | `fix-helium-drm-macos-x64` |
 
 **Windows:** open PowerShell in the download folder:
 
@@ -321,9 +335,12 @@ In the examples, `fix-helium-drm` stands for however you run the tool: the one-l
 | `--all` | Fix every Helium found, e.g. both an installed and a portable copy. |
 | `--reinstall` | Copy Widevine again even if Helium already has that version. |
 | `--no-verify` | Skip the check inside Helium after installing. |
-| `-y`, `--yes` | Close and reopen Helium without asking (Windows). |
+| `-y`, `--yes` | Close and reopen Helium without asking (Windows, macOS). |
 | `--undo` | Remove the fix from Helium. |
-| `--auto` / `--auto off` | Turn automatic re-fixing after Helium updates on or off (Windows). |
+| `--auto` / `--auto off` | Turn automatic re-fixing after Helium updates on or off (Windows, macOS). |
+| `--gui` | Open the window version (also what double-clicking the Windows `.exe` does). |
+| `--lang <code>` | Language: `en`, `ro`, `es`, `de`, `fr`, `pt`, `it`, `ru`. Default: your system language. |
+| `--json` | With `--status` or `--list-sources`: print JSON, for scripts. |
 | `--verbose`, `--debug` | Show every location checked and every decision made. |
 | `-V`, `--version` | Show the version. |
 | `-h`, `--help` | Show help. |
@@ -357,6 +374,12 @@ fix-helium-drm --latest
 
 # Remove the fix
 fix-helium-drm --undo
+
+# Open the window version
+fix-helium-drm --gui
+
+# In Romanian (or es, de, fr, pt, it, ru, en)
+fix-helium-drm --lang ro
 
 # Something's off? See every step
 fix-helium-drm --verbose
@@ -401,6 +424,7 @@ fix-helium-drm --verbose
   - **Best:** run the fixer once with `--auto`. A hidden scheduled task then checks at logon and every hour and re-applies the fix by itself; you'll just need to restart Helium once after an update. No admin rights, no console windows popping up. The log is in `%LOCALAPPDATA%\helium-drm-fixer\auto-fix.log`; `--auto off` removes everything.
   - Or simply run the one-liner again; it takes a few seconds.
 - **Windows (portable):** if you unpack a new zip, run the tool again (or use `--auto`; it also finds a running portable Helium).
+- **macOS:** an update replaces Helium.app, which removes Widevine. Run the one-liner again, or turn on `--auto` once: a LaunchAgent re-applies the fix at login and every hour (it waits until Helium is closed, so it never re-signs a running app).
 - **Linux:** the fix lives in your Helium profile, so it **survives Helium updates**. Run the tool again only if you want a newer Widevine.
 
 ---
@@ -419,6 +443,7 @@ Prefer to do it by hand? Delete this folder and restart Helium:
 | --- | --- |
 | Windows (installer) | `%LOCALAPPDATA%\imput\Helium\Application\<version>\WidevineCdm` |
 | Windows (portable) | `<your Helium folder>\WidevineCdm` |
+| macOS | `Helium.app/Contents/Frameworks/Helium Framework.framework/Versions/<version>/Libraries/WidevineCdm` (then re-sign: `codesign --force --deep --sign - /Applications/Helium.app`) |
 | Linux | `~/.config/net.imput.helium/WidevineCdm` |
 
 Not sure where it went? `fix-helium-drm --dry-run` prints the exact path.
@@ -448,7 +473,7 @@ This tool gives Helium a working Widevine CDM. It does **not** change Helium's C
 
 - **Usually works:** sites that accept any browser with Widevine, for example YouTube movies and Crunchyroll.
 - **May fail or be limited:** services with strict checks, such as Netflix or Amazon Prime Video. They can require an approved browser, VMP signatures, hardware-backed security or output protection that no copied CDM can provide, and may limit video quality where they do play.
-- **macOS:** basic support is in the code (copy plus re-signing Helium.app), but it isn't the focus and isn't tested.
+- **macOS:** adding Widevine changes Helium.app, so the tool re-signs it with an ad-hoc (local) signature, the same approach other Widevine fixes for Chromium browsers use. macOS may then ask once for keychain access when Helium starts. The macOS fix has been built from Helium's real app layout but not yet run on a real Mac.
 
 ---
 
@@ -545,7 +570,13 @@ It's a single self-contained file that includes the Bun runtime, so you don't ne
 Yes. That's one of the tested setups. With several Heliums (installed and portable), use `--all`.
 
 **Does it work on ARM?**
-Yes. It reads Helium's CPU type and gets the matching Widevine, downloading the ARM64 build from Google if needed. The Windows executable is x64 and runs on Windows on ARM through emulation; Linux has a native ARM64 build.
+Yes. It reads Helium's CPU type and gets the matching Widevine, downloading the ARM64 build from Google if needed. The Windows executable is x64 and runs on Windows on ARM through emulation; macOS (Apple Silicon) and Linux have native ARM64 builds.
+
+**Can I use it without a terminal?**
+Yes. Double-click the Windows `.exe` and the window version opens. On macOS and Linux, run `fix-helium-drm --gui` once from a terminal (or create a shortcut to it).
+
+**Which languages does it speak?**
+English, Romanian, Spanish, German, French, Portuguese, Italian and Russian. It follows your system language; `--lang <code>` or the menu in the window changes it.
 
 ---
 
@@ -557,7 +588,7 @@ bun test             # run the test suite
 bun run typecheck    # TypeScript type check
 bun run cli.ts       # run from source
 bun run build        # build an executable for this system
-bun run build:all    # build Windows x64, Linux x64 and Linux ARM64 into ./dist
+bun run build:all    # build Windows x64, Linux x64/ARM64 and macOS Intel/Apple Silicon into ./dist
 ```
 
 ### Project structure
@@ -572,6 +603,8 @@ lib/zip.ts                Built-in ZIP and CRX3 reader
 lib/verify.ts             Invisible in-Helium DRM check via DevTools Protocol
 lib/autofix.ts            Windows scheduled task + window-less copy for --auto
 lib/console.ts            Double-click detection, prompts
+lib/gui.ts                The window version: local page + app window
+lib/i18n.ts               Translations (8 languages) and language detection
 lib/update-check.ts       "New version available" notice
 lib/paths.ts              Finding Chrome and Helium on each OS
 lib/windows.ts            Registry, running processes, closing/reopening programs
@@ -582,6 +615,7 @@ install.ps1 / install.sh  One-line installers
 packaging/                Scoop, winget and AUR manifests (regenerated on every release)
 scripts/release.ts        One-command release
 scripts/packaging.ts      Writes the package-manager manifests
+scripts/winget.ts         Opens or updates the winget pull request
 ```
 
 ### Releasing
@@ -598,6 +632,7 @@ One command does the whole flow:
 4. Builds all executables with SHA-256 checksums.
 5. Commits, tags and pushes.
 6. Publishes the GitHub release, with notes generated from the `feat:` / `fix:` commits since the last release.
+7. Opens the winget pull request for the new version (or moves the first submission to it while that one is still in review). `--no-winget` skips this.
 
 Pushing a `v*` tag also lets GitHub Actions rebuild and re-upload the same files.
 
