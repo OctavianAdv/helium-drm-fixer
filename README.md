@@ -40,7 +40,31 @@ curl -fsSL https://raw.githubusercontent.com/OctavianAdv/helium-drm-fixer/main/i
 
 - **Helium on Windows:** the normal installer (per-user or all users), the registry, a Helium window that's currently open, and the portable zip unpacked in Downloads, Desktop, Documents, your user folder or `C:\`.
 - **Helium on Linux:** its profile folder. If Helium is installed (`/opt/helium`, an AppImage, on your `PATH`) but was never opened, the tool creates the profile folder itself.
-- **Widevine:** Google Chrome first. Then copies already downloaded by Edge, Brave, Vivaldi or Chromium. If there are none, it downloads Chrome just to take Widevine from it.
+- **Widevine:** from any browser or app that has it (see below). It uses the newest version found. Only if there is none at all does it download Chrome just to take Widevine from it.
+
+### Where it gets Widevine from
+
+| | Windows | Linux |
+| --- | --- | --- |
+| **Chrome** (Stable, Beta, Dev, Canary) | ✅ | ✅ (also Flatpak) |
+| **Microsoft Edge** (Stable, Beta, Dev, Canary) | ✅ | ✅ (also Flatpak) |
+| **Brave** (Stable, Beta, Nightly) | ✅ | ✅ (also Flatpak, Snap) |
+| **Vivaldi** | ✅ | ✅ (also Flatpak) |
+| **Opera, Opera GX, Opera Air** | ✅ | ✅ Opera (also Flatpak) |
+| **Yandex, Chromium, Thorium** | ✅ | ✅ (Chromium also Snap, Flatpak) |
+| **Arc, Supermium, Cent Browser** | ✅ | – |
+| **Firefox, LibreWolf, Zen, Floorp, Waterfox** | ✅ (Firefox also from the Microsoft Store) | ✅ (also Flatpak, Snap) |
+| **Spotify** | ✅ | – |
+| **Apps with a built-in browser** (OBS, WebView2 apps, CEF apps, ...) | ✅ | ✅ |
+
+Firefox keeps Widevine in a different folder layout; the tool converts it to the layout Helium needs. Every copy is checked before use: it must have a version, the actual CDM library, and be built for your CPU (x64 or ARM).
+
+See everything it finds, and pick one yourself:
+
+```bash
+fix-helium-drm --list-sources          # list every Widevine copy, best first
+fix-helium-drm --from firefox          # use the copy from a specific browser or app
+```
 
 ## Manual download
 
@@ -82,7 +106,7 @@ bun run cli.ts
 
 ## How it works
 
-1. **Finds a WidevineCdm.** Checks Chrome (install folders, registry, `PATH`), then the copies other Chromium browsers keep in their profiles. Each one is checked for a real CDM library before use, since browsers can leave empty folders behind. If none is found, it downloads Chrome:
+1. **Finds a WidevineCdm.** It collects every copy from the browsers and apps listed above and picks the newest version (Chrome wins a tie). Apps with a built-in browser are only searched when no browser has Widevine, or with `--list-sources` / `--from`. If none is found, it downloads Chrome:
    - Windows: the official uncompressed installer, via [Bush2021/chrome_installer](https://github.com/Bush2021/chrome_installer), unpacked with a bundled 7-Zip.
    - Linux (x64): Google's official `.deb` package, unpacked without `dpkg` (only `tar` and `xz` are needed), so it works on any distro.
 2. **Finds Helium.**
@@ -101,7 +125,9 @@ Downloads are cached in your temp folder and verified by checksum, so running th
 --check               Check if the fix can be applied, without changing anything
 --dry-run             Show what would be copied, without changing anything
 --verbose, --debug    Show detailed logs
---chrome-path <path>  Use this WidevineCdm folder instead of finding Chrome
+--list-sources        List every Widevine copy found on this computer
+--from <browser>      Take Widevine from this browser or app (e.g. edge, brave, firefox, spotify)
+--chrome-path <path>  Use the WidevineCdm folder at this path (Chromium or Firefox layout)
 --helium-path <path>  Helium version folder (Windows/macOS) or profile folder (Linux)
 --force-download      Download Chrome again even if it is cached
 -y, --yes             Close and reopen Helium without asking (Windows)
@@ -137,8 +163,8 @@ Install Helium from [helium.is](https://helium.is/). If it's installed somewhere
 ### "WidevineCdm is in use"
 Helium is still running and you chose not to close it. Run the tool again and answer yes, or use `--yes`.
 
-### "Chrome not found"
-The tool downloads Chrome automatically. If that fails, install Chrome from [google.com/chrome](https://www.google.com/chrome/).
+### "No Widevine found"
+No browser or app on your computer has Widevine yet, so the tool downloads Chrome to get it. If that fails, install any supported browser (for example Chrome from [google.com/chrome](https://www.google.com/chrome/)), open a DRM site in it once, and run the tool again.
 
 ### "Failed to copy WidevineCdm"
 Make sure you have write permissions to the Helium folder. On Windows with an all-users install, run as Administrator.
