@@ -57,6 +57,8 @@ main() {
   fi
 
   chmod +x "$tmp/$asset"
+  # This is always the latest version, so skip its own update check
+  export HELIUM_DRM_FIXER_NO_UPDATE_CHECK=1
   # Read answers from the terminal, since stdin is this script when piped
   if (: </dev/tty) 2>/dev/null; then
     "$tmp/$asset" "$@" </dev/tty

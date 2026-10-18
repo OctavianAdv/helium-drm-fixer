@@ -47,6 +47,8 @@ function Invoke-HeliumDrmFixer {
     Write-Host 'Checksum verified.' -ForegroundColor DarkGray
 
     # Show the fixer's emoji and progress bar correctly
+    # This is always the latest version, so skip its own update check
+    $env:HELIUM_DRM_FIXER_NO_UPDATE_CHECK = '1'
     $previousEncoding = [Console]::OutputEncoding
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
     try {
@@ -54,6 +56,7 @@ function Invoke-HeliumDrmFixer {
         $code = $LASTEXITCODE
     } finally {
         [Console]::OutputEncoding = $previousEncoding
+        Remove-Item Env:HELIUM_DRM_FIXER_NO_UPDATE_CHECK -ErrorAction SilentlyContinue
         Remove-Item -Force $exe, $sumsFile -ErrorAction SilentlyContinue
     }
 
