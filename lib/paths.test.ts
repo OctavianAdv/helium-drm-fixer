@@ -1,7 +1,49 @@
 import { describe, it, expect } from 'bun:test';
-import { getPlatform, getArch, getChromeAssetPattern } from './paths';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  getPlatform,
+  getArch,
+  getChromeAssetPattern,
+  compareVersions,
+  listVersionDirs,
+} from './paths';
 
 describe('paths', () => {
+  describe('compareVersions', () => {
+    it('should compare each part numerically', () => {
+      expect(compareVersions('143.0.7499.170', '143.0.7499.40')).toBeGreaterThan(0);
+      expect(compareVersions('99.0.0.0', '100.0.0.0')).toBeLessThan(0);
+      expect(compareVersions('1.2.3.4', '1.2.3.4')).toBe(0);
+    });
+  });
+
+  describe('listVersionDirs', () => {
+    it('should list only version folders, newest first', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'helium-drm-versions-'));
+      try {
+        await mkdir(join(dir, '143.0.7499.40'));
+        await mkdir(join(dir, '143.0.7499.170'));
+        await mkdir(join(dir, '99.0.1.2'));
+        await mkdir(join(dir, 'Dictionaries'));
+        await writeFile(join(dir, '150.0.0.0'), 'not a folder');
+
+        expect(await listVersionDirs(dir)).toEqual([
+          '143.0.7499.170',
+          '143.0.7499.40',
+          '99.0.1.2',
+        ]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('should return an empty list for a missing folder', async () => {
+      expect(await listVersionDirs(join(tmpdir(), 'helium-drm-missing-dir'))).toEqual([]);
+    });
+  });
+
   describe('getPlatform', () => {
     it('should return the current platform', () => {
       const platform = getPlatform();
@@ -51,9 +93,14 @@ describe('paths', () => {
   });
 
   describe('getChromeAssetPattern', () => {
-    it('should return a regex pattern', () => {
+    it('should return a regex pattern on Windows', () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
+
       const pattern = getChromeAssetPattern();
       expect(pattern).toBeInstanceOf(RegExp);
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform, writable: true });
     });
 
     it('should match Windows x64 asset names', () => {

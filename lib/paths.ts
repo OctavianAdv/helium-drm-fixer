@@ -2,6 +2,7 @@ import { BrowserFinder } from "@agent-infra/browser-finder";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { readdir, stat, realpath } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { getLogger } from "./logger";
 
 export interface PlatformPaths {
@@ -10,6 +11,8 @@ export interface PlatformPaths {
 }
 
 export type Platform = "win32" | "darwin" | "linux";
+
+const VERSION_DIR = /^\d+\.\d+\.\d+\.\d+$/;
 
 export function getPlatform(): Platform {
   const platform = process.platform;
@@ -28,170 +31,218 @@ export function getArch(): "x64" | "arm64" {
 }
 
 /**
- * Find Chrome WidevineCdm path using browser-finder
+ * Compare two dotted version strings (e.g. "143.0.7499.170").
+ * Returns a negative number if a < b, positive if a > b, 0 if equal.
  */
-export async function findChromeWidevinePath(): Promise<string | null> {
-  const log = getLogger();
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
 
+async function isDirectory(path: string): Promise<boolean> {
   try {
-    const finder = new BrowserFinder();
-    const chrome = finder.findBrowser("chrome");
-
-    log.info(`Found Chrome executable at: ${chrome.path}`);
-
-    const platform = getPlatform();
-    let widevinePath: string | null = null;
-
-    if (platform === "win32") {
-      const chromePath = chrome.path;
-      const appPath = dirname(chromePath);
-
-      log.info(`Scanning Chrome Application directory: ${appPath}`);
-
-      const entries = await readdir(appPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (entry.isDirectory() && /^\d+\.\d+\.\d+\.\d+$/.test(entry.name)) {
-          const versionPath = join(appPath, entry.name, "WidevineCdm");
-          log.info(`Checking path: ${versionPath}`);
-          try {
-            const stats = await stat(versionPath);
-            if (stats.isDirectory()) {
-              log.info(`✓ Found WidevineCdm at: ${versionPath}`);
-              widevinePath = versionPath;
-              break;
-            }
-          } catch {
-            log.info(`✗ Path does not exist: ${versionPath}`);
-          }
-        }
-      }
-    } else if (platform === "darwin") {
-      const chromePath = chrome.path;
-      const versionsPath = join(
-        dirname(chromePath),
-        "..",
-        "Frameworks",
-        "Google Chrome Framework.framework",
-        "Versions"
-      );
-
-      log.info(`Scanning Chrome Versions directory: ${versionsPath}`);
-
-      const entries = await readdir(versionsPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (entry.isDirectory() && /^\d+\.\d+\.\d+\.\d+$/.test(entry.name)) {
-          const versionWidevine = join(
-            versionsPath,
-            entry.name,
-            "Libraries",
-            "WidevineCdm"
-          );
-          log.info(`Checking path: ${versionWidevine}`);
-          try {
-            const stats = await stat(versionWidevine);
-            if (stats.isDirectory()) {
-              log.info(`✓ Found WidevineCdm at: ${versionWidevine}`);
-              widevinePath = versionWidevine;
-              break;
-            }
-          } catch {
-            log.info(`✗ Path does not exist: ${versionWidevine}`);
-          }
-        }
-      }
-    } else {
-      const chromePath = chrome.path;
-      let chromeDir = dirname(chromePath);
-
-      // On Linux, chrome.path is often a wrapper script in /usr/bin.
-      // Try resolving symlinks to find the real Chrome install directory.
-      try {
-        const resolved = await realpath(chromePath);
-        if (resolved !== chromePath) {
-          chromeDir = dirname(resolved);
-          log.info(`Resolved Chrome symlink to: ${chromeDir}`);
-        }
-      } catch {
-        // ignore - continue with original path
-      }
-
-      const directPath = join(chromeDir, "WidevineCdm");
-      log.info(`Checking direct path: ${directPath}`);
-
-      try {
-        const stats = await stat(directPath);
-        if (stats.isDirectory()) {
-          log.info(`✓ Found WidevineCdm at: ${directPath}`);
-          widevinePath = directPath;
-        }
-      } catch {
-        log.info(`✗ Direct path does not exist, scanning for version folders in: ${chromeDir}`);
-        const entries = await readdir(chromeDir, { withFileTypes: true });
-
-        for (const entry of entries) {
-          if (entry.isDirectory() && /^\d+\.\d+\.\d+\.\d+$/.test(entry.name)) {
-            const versionPath = join(chromeDir, entry.name, "WidevineCdm");
-            log.info(`Checking path: ${versionPath}`);
-            try {
-              const stats = await stat(versionPath);
-              if (stats.isDirectory()) {
-                log.info(`✓ Found WidevineCdm at: ${versionPath}`);
-                widevinePath = versionPath;
-                break;
-              }
-            } catch {
-              log.info(`✗ Path does not exist: ${versionPath}`);
-            }
-          }
-        }
-      }
-
-      // Fallback: check well-known Linux Chrome installation directories
-      if (!widevinePath) {
-        const knownPaths = [
-          "/opt/google/chrome/WidevineCdm",
-          "/opt/google/chrome-beta/WidevineCdm",
-          "/usr/lib/chromium/WidevineCdm",
-          "/usr/lib/chromium-browser/WidevineCdm",
-        ];
-        for (const knownPath of knownPaths) {
-          log.info(`Checking known Chrome path: ${knownPath}`);
-          try {
-            const stats = await stat(knownPath);
-            if (stats.isDirectory()) {
-              log.info(`✓ Found WidevineCdm at: ${knownPath}`);
-              widevinePath = knownPath;
-              break;
-            }
-          } catch {
-            log.info(`✗ Path does not exist: ${knownPath}`);
-          }
-        }
-      }
-    }
-
-    return widevinePath;
+    return (await stat(path)).isDirectory();
   } catch {
-    return null;
+    return false;
   }
 }
 
 /**
- * Find Helium browser WidevineCdm target path
+ * List version folders (e.g. "143.0.7499.170") inside a directory, newest first.
+ */
+export async function listVersionDirs(baseDir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory() && VERSION_DIR.test(e.name))
+      .map((e) => e.name)
+      .sort((a, b) => compareVersions(b, a));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Find `<baseDir>/<newest version>/<...subPath>` that exists as a directory.
+ */
+async function findInNewestVersion(
+  baseDir: string,
+  ...subPath: string[]
+): Promise<string | null> {
+  const log = getLogger();
+  log.info(`Scanning for version folders in: ${baseDir}`);
+
+  for (const version of await listVersionDirs(baseDir)) {
+    const candidate = join(baseDir, version, ...subPath);
+    log.info(`Checking path: ${candidate}`);
+    if (await isDirectory(candidate)) {
+      log.info(`✓ Found: ${candidate}`);
+      return candidate;
+    }
+    log.info(`✗ Path does not exist: ${candidate}`);
+  }
+
+  return null;
+}
+
+/**
+ * Home directory of the user we are fixing Helium for.
+ * Under `sudo` on Linux this is the invoking user, not root.
+ */
+export function getUserHome(): string {
+  const sudoUser = process.env.SUDO_USER;
+  if (getPlatform() !== "linux" || process.getuid?.() !== 0 || !sudoUser) {
+    return homedir();
+  }
+
+  try {
+    const entry = execFileSync("getent", ["passwd", sudoUser], {
+      encoding: "utf-8",
+    });
+    const home = entry.trim().split(":")[5];
+    if (home) return home;
+  } catch {
+    // getent unavailable - fall back to the conventional location
+  }
+  return join("/home", sudoUser);
+}
+
+/**
+ * uid/gid of the user who invoked `sudo`, so copied files can be handed back to them.
+ */
+export function getSudoOwner(): { uid: number; gid: number } | null {
+  if (getPlatform() !== "linux" || process.getuid?.() !== 0) return null;
+  const uid = Number(process.env.SUDO_UID);
+  const gid = Number(process.env.SUDO_GID);
+  if (!Number.isInteger(uid) || !Number.isInteger(gid)) return null;
+  return { uid, gid };
+}
+
+function findChromeExecutable(): string | null {
+  const log = getLogger();
+  try {
+    const chrome = new BrowserFinder().findBrowser("chrome");
+    log.info(`Found Chrome executable at: ${chrome.path}`);
+    return chrome.path;
+  } catch {
+    log.info("Chrome executable not found by browser-finder");
+    return null;
+  }
+}
+
+function windowsProgramDirs(...subPath: string[]): string[] {
+  const roots = [
+    process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"),
+    process.env.ProgramFiles || "C:\\Program Files",
+    process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+  ];
+  return roots.map((root) => join(root, ...subPath));
+}
+
+async function findChromeWidevineWindows(
+  chromeExe: string | null
+): Promise<string | null> {
+  const appDirs = windowsProgramDirs("Google", "Chrome", "Application");
+  if (chromeExe) appDirs.unshift(dirname(chromeExe));
+
+  for (const appDir of new Set(appDirs)) {
+    const found = await findInNewestVersion(appDir, "WidevineCdm");
+    if (found) return found;
+  }
+  return null;
+}
+
+async function findChromeWidevineMac(
+  chromeExe: string | null
+): Promise<string | null> {
+  const contentsDir = chromeExe
+    ? join(dirname(chromeExe), "..")
+    : "/Applications/Google Chrome.app/Contents";
+  const versionsPath = join(
+    contentsDir,
+    "Frameworks",
+    "Google Chrome Framework.framework",
+    "Versions"
+  );
+  return findInNewestVersion(versionsPath, "Libraries", "WidevineCdm");
+}
+
+async function findChromeWidevineLinux(
+  chromeExe: string | null
+): Promise<string | null> {
+  const log = getLogger();
+  const chromeDirs: string[] = [];
+
+  if (chromeExe) {
+    // chromeExe is often a wrapper script or symlink in /usr/bin -
+    // resolve it to find the real install directory.
+    try {
+      const resolved = await realpath(chromeExe);
+      if (resolved !== chromeExe) {
+        log.info(`Resolved Chrome symlink to: ${resolved}`);
+      }
+      chromeDirs.push(dirname(resolved));
+    } catch {
+      chromeDirs.push(dirname(chromeExe));
+    }
+  }
+
+  // Well-known Linux Chrome/Chromium installation directories
+  chromeDirs.push(
+    "/opt/google/chrome",
+    "/opt/google/chrome-beta",
+    "/opt/google/chrome-unstable",
+    "/usr/lib/chromium",
+    "/usr/lib/chromium-browser",
+    "/usr/lib64/chromium-browser"
+  );
+
+  for (const chromeDir of new Set(chromeDirs)) {
+    const directPath = join(chromeDir, "WidevineCdm");
+    log.info(`Checking path: ${directPath}`);
+    if (await isDirectory(directPath)) {
+      log.info(`✓ Found WidevineCdm at: ${directPath}`);
+      return directPath;
+    }
+
+    const found = await findInNewestVersion(chromeDir, "WidevineCdm");
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
+ * Find Chrome's WidevineCdm directory on this machine.
+ */
+export async function findChromeWidevinePath(): Promise<string | null> {
+  const chromeExe = findChromeExecutable();
+
+  switch (getPlatform()) {
+    case "win32":
+      return findChromeWidevineWindows(chromeExe);
+    case "darwin":
+      return findChromeWidevineMac(chromeExe);
+    case "linux":
+      return findChromeWidevineLinux(chromeExe);
+  }
+}
+
+/**
+ * Find the newest Helium version folder, which receives WidevineCdm on
+ * Windows and macOS. (Linux uses the profile folder instead - see
+ * findHeliumUserDataDir.)
  */
 export async function findHeliumVersionPath(): Promise<string | null> {
   const log = getLogger();
-  const platform = getPlatform();
-  let basePath: string;
 
-  if (platform === "win32") {
-    const localAppData =
-      process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
-    basePath = join(localAppData, "imput", "Helium", "Application");
-  } else if (platform === "darwin") {
-    basePath = join(
+  if (getPlatform() === "darwin") {
+    const versionsPath = join(
       "/Applications",
       "Helium.app",
       "Contents",
@@ -199,122 +250,48 @@ export async function findHeliumVersionPath(): Promise<string | null> {
       "Helium Framework.framework",
       "Versions"
     );
-  } else {
-    // Linux: check system package installations first
-    const systemInstall = await findHeliumLinuxInstall(log);
-    if (systemInstall) return systemInstall;
-
-    // Fall back to user config path with version subdirectories
-    basePath = join(homedir(), ".config", "Helium", "Application");
+    return findInNewestVersion(versionsPath, "Libraries");
   }
 
-  log.info(`Checking Helium base path: ${basePath}`);
-
-  try {
-    const baseStats = await stat(basePath);
-    if (!baseStats.isDirectory()) {
-      log.info(`✗ Base path is not a directory: ${basePath}`);
-      return null;
-    }
-  } catch {
-    log.info(`✗ Base path does not exist: ${basePath}`);
-    return null;
-  }
-
-  log.info(`Scanning for Helium version folders in: ${basePath}`);
-
-  const entries = await readdir(basePath, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (entry.isDirectory() && /^\d+\.\d+\.\d+\.\d+$/.test(entry.name)) {
-      const versionPath =
-        platform === "darwin"
-          ? join(basePath, entry.name, "Libraries")
-          : join(basePath, entry.name);
-
+  // Windows: per-user install first, then an install for all users
+  for (const appDir of windowsProgramDirs("imput", "Helium", "Application")) {
+    log.info(`Checking Helium base path: ${appDir}`);
+    const newest = (await listVersionDirs(appDir))[0];
+    if (newest) {
+      const versionPath = join(appDir, newest);
       log.info(`✓ Found Helium version folder: ${versionPath}`);
       return versionPath;
     }
+    log.info(`✗ No Helium version folder in: ${appDir}`);
   }
-
-  log.info(`✗ No valid Helium version folder found`);
 
   return null;
 }
 
 /**
- * Find Helium's user data directory on Linux.
- * Chromium loads WidevineCdm from the user data dir using the component updater format.
+ * Find Helium's user data (profile) directory on Linux.
+ * Chromium on Linux loads WidevineCdm from here using the component updater
+ * layout, which works for every install type (AppImage, tarball, distro package).
  */
 export async function findHeliumUserDataDir(): Promise<string | null> {
   const log = getLogger();
+  const home = getUserHome();
+  const configHome =
+    (home === homedir() && process.env.XDG_CONFIG_HOME) || join(home, ".config");
+
   const candidates = [
-    join(homedir(), ".config", "net.imput.helium"),
-    join(homedir(), ".config", "Helium"),
-    join(homedir(), ".config", "helium"),
+    join(configHome, "net.imput.helium"),
+    join(configHome, "Helium"),
+    join(configHome, "helium"),
   ];
 
   for (const dir of candidates) {
     log.info(`Checking Helium user data dir: ${dir}`);
-    try {
-      const stats = await stat(dir);
-      if (stats.isDirectory()) {
-        log.info(`✓ Found Helium user data dir: ${dir}`);
-        return dir;
-      }
-    } catch {
-      log.info(`✗ Path does not exist: ${dir}`);
+    if (await isDirectory(dir)) {
+      log.info(`✓ Found Helium user data dir: ${dir}`);
+      return dir;
     }
-  }
-
-  return null;
-}
-
-/**
- * Find Helium system installation on Linux.
- * Handles flat directory layouts (e.g. /opt/helium-browser-bin/) used by
- * distro packages where there are no version subdirectories.
- */
-async function findHeliumLinuxInstall(
-  log: ReturnType<typeof getLogger>
-): Promise<string | null> {
-  const candidates: string[] = [];
-
-  // Try resolving the helium-browser binary symlink to find the install dir
-  for (const binPath of ["/usr/bin/helium-browser", "/usr/bin/helium"]) {
-    try {
-      const resolved = await realpath(binPath);
-      const dir = dirname(resolved);
-      if (!candidates.includes(dir)) {
-        candidates.push(dir);
-      }
-    } catch {
-      // not found
-    }
-  }
-
-  // Known system package locations
-  if (!candidates.includes("/opt/helium-browser-bin")) {
-    candidates.push("/opt/helium-browser-bin");
-  }
-
-  for (const candidate of candidates) {
-    log.info(`Checking Linux Helium system path: ${candidate}`);
-    try {
-      const stats = await stat(candidate);
-      if (!stats.isDirectory()) continue;
-
-      // Verify this is a Helium installation by checking for the helium binary
-      try {
-        await stat(join(candidate, "helium"));
-        log.info(`✓ Found Helium system installation: ${candidate}`);
-        return candidate;
-      } catch {
-        log.info(`✗ No helium binary in: ${candidate}`);
-      }
-    } catch {
-      log.info(`✗ Path does not exist: ${candidate}`);
-    }
+    log.info(`✗ Path does not exist: ${dir}`);
   }
 
   return null;
@@ -338,6 +315,6 @@ export function getChromeAssetPattern(): RegExp {
 
   // This GitHub repo only has Windows builds
   throw new Error(
-    "Chrome download is only supported on Windows. Please install Chrome manually on macOS/Linux."
+    "Chrome download is only supported on Windows. Linux uses Google's .deb package instead."
   );
 }
