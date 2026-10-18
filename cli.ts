@@ -5,6 +5,7 @@ import { fixHeliumDrm } from "./commands/index";
 import { ExitSignal, pressEnterToClose, startedByDoubleClick } from "./lib/console";
 import { checkForUpdate } from "./lib/update-check";
 import { detectLanguage, setLanguage, t, LANGUAGES } from "./lib/i18n";
+import { startGui } from "./lib/gui";
 import pkg from "./package.json" with { type: "json" };
 
 const program = new Command();
@@ -35,6 +36,7 @@ program
   .option("--undo", "Remove the fix from Helium")
   .option("--auto [on|off]", "Re-apply the fix automatically after Helium updates (Windows, macOS)")
   .option("--auto-run", "(used by --auto's scheduled task)")
+  .option("--gui", "Open the window version (also opens when the program is double-clicked)")
   .option("--lang <code>", `Language: ${Object.keys(LANGUAGES).join(", ")} (default: your system language)`)
   .option("--json", "With --status or --list-sources: print JSON")
   .option("--verbose", "Show every location checked and every decision made")
@@ -42,6 +44,19 @@ program
   .action(async (options) => {
     setLanguage(detectLanguage(options.lang));
     const doubleClicked = startedByDoubleClick();
+
+    // Double-clicked with no options, or --gui: show the window version
+    if (options.gui || (doubleClicked && process.argv.length <= 2)) {
+      try {
+        await startGui(pkg.version, { hideConsole: doubleClicked });
+        process.exit(0);
+      } catch (error) {
+        console.error(chalk.red("Error:"), error);
+        if (doubleClicked) await pressEnterToClose();
+        process.exit(1);
+      }
+    }
+
     const update = options.autoRun || options.json ? Promise.resolve(null) : checkForUpdate(pkg.version);
     let code = 0;
 
