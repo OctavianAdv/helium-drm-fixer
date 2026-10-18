@@ -1,12 +1,12 @@
 {
-    "version": "1.4.0",
+    "version": "1.5.0",
     "description": "Fix DRM (Widevine) in the Helium browser on Windows and Linux",
     "homepage": "https://github.com/OctavianAdv/helium-drm-fixer",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/OctavianAdv/helium-drm-fixer/releases/download/v1.4.0/fix-helium-drm-windows-x64.exe#/fix-helium-drm.exe",
-            "hash": "cb8622032e9a37c0f01dbc6373dc58920fc5a6c9c49b2796d0ab41a07792173b"
+            "url": "https://github.com/OctavianAdv/helium-drm-fixer/releases/download/v1.5.0/fix-helium-drm-windows-x64.exe#/fix-helium-drm.exe",
+            "hash": "edfd8873b6d54e81e1ab98859919cf1fdc2d6d30ffae03ba873b83b3ed0a4a5a"
         }
     },
     "bin": "fix-helium-drm.exe",

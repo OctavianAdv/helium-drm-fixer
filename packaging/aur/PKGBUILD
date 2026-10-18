@@ -1,6 +1,6 @@
 # Maintainer: OctavianAdv <https://github.com/OctavianAdv>
 pkgname=helium-drm-fixer-bin
-pkgver=1.4.0
+pkgver=1.5.0
 pkgrel=1
 pkgdesc="Fix DRM (Widevine) in the Helium browser on Windows and Linux"
 arch=('x86_64' 'aarch64')
@@ -13,8 +13,8 @@ depends=('tar' 'xz')
 options=('!strip' '!debug')
 source_x86_64=("fix-helium-drm-${pkgver}-x86_64::${url}/releases/download/v${pkgver}/fix-helium-drm-linux-x64")
 source_aarch64=("fix-helium-drm-${pkgver}-aarch64::${url}/releases/download/v${pkgver}/fix-helium-drm-linux-arm64")
-sha256sums_x86_64=('0f11c006d61a0cc68bb070f51d2054e35b229d651af0375d423e786ef1e98c51')
-sha256sums_aarch64=('ec623d92e11f42223b2afd454353336a1cdfcc79b9bb8f737457390468729789')
+sha256sums_x86_64=('7bf7adc1c482dd29c737c1949abed31f22ec86b604fc93a40574583d2d781719')
+sha256sums_aarch64=('a35fcd5de3e727dea688c73e303de3aec13da1ce6e7ff5ac4870eb6af2c3069b')
 
 package() {
   install -Dm755 "${srcdir}/fix-helium-drm-${pkgver}-${CARCH}" "${pkgdir}/usr/bin/fix-helium-drm"
