@@ -8,14 +8,16 @@ const program = new Command();
 program
   .name("fix-helium-drm")
   .description(
-    "Fix DRM issues in Helium browser by copying WidevineCdm from Chrome"
+    "Fix DRM in Helium browser by installing Widevine from your other browsers"
   )
   .version(pkg.version)
   .option("--check", "Check if fix is needed without applying changes")
   .option("--dry-run", "Show what would be done without making changes")
   .option("--verbose", "Enable verbose logging")
   .option("--debug", "Enable debug logging (alias for --verbose)")
-  .option("--chrome-path <path>", "Custom Chrome WidevineCdm path")
+  .option("--chrome-path <path>", "Use the WidevineCdm folder at this path")
+  .option("--from <browser>", "Take Widevine from this browser or app (e.g. edge, brave, firefox, spotify)")
+  .option("--list-sources", "List every Widevine copy found on this computer")
   .option(
     "--helium-path <path>",
     "Custom Helium version folder (Windows/macOS) or profile folder (Linux)"
@@ -32,6 +34,8 @@ program
         heliumPath: options.heliumPath,
         forceDownload: options.forceDownload,
         yes: options.yes,
+        listSources: options.listSources,
+        from: options.from,
       });
     } catch (error) {
       console.error("Error:", error);

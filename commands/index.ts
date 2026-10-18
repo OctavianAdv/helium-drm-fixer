@@ -1,5 +1,4 @@
 import {
-  findChromeWidevinePath,
   findHeliumVersionPath,
   findHeliumUserDataDir,
   findHeliumLinuxInstall,
@@ -7,7 +6,12 @@ import {
   getPlatform,
   getSudoOwner,
 } from "../lib/paths";
-import { copyDir } from "../lib/utils";
+import {
+  findWidevineSources,
+  installWidevine,
+  readWidevine,
+  type WidevineSource,
+} from "../lib/widevine";
 import { initLogger, type Logger } from "../lib/logger";
 import { downloadAndExtractChrome } from "../lib/chrome-downloader";
 import {
@@ -16,7 +20,7 @@ import {
   startIndependentProcess,
 } from "../lib/windows";
 import { join, dirname, basename } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { promisify } from "node:util";
@@ -33,39 +37,92 @@ export interface FixHeliumDrmOptions {
   heliumPath?: string;
   forceDownload?: boolean;
   yes?: boolean;
+  listSources?: boolean;
+  from?: string;
 }
 
-async function getChromeWidevinePath(
+function describe(source: WidevineSource): string {
+  return `Widevine ${source.version} from ${source.name}`;
+}
+
+/**
+ * Pick the Widevine to install: --chrome-path, --from <browser>, or the
+ * newest copy any browser/app on this machine has. Download Chrome only
+ * when there is none.
+ */
+async function getWidevineSource(
   logger: Logger,
   spinner: ReturnType<typeof ora>,
   options: FixHeliumDrmOptions
-): Promise<string> {
+): Promise<WidevineSource> {
   if (options.chromePath) {
-    logger.info(`Using custom Chrome path: ${options.chromePath}`);
-    spinner.succeed(
-      chalk.green(`Using custom Chrome path: ${options.chromePath}`)
-    );
-    return options.chromePath;
+    const source = await readWidevine(options.chromePath, "custom path");
+    if (!source) {
+      throw new Error(
+        `No usable Widevine in ${options.chromePath} (needs manifest.json and the CDM library for this system)`
+      );
+    }
+    spinner.succeed(chalk.green(`Using ${describe(source)}: ${source.path}`));
+    return source;
   }
 
-  let chromeWidevinePath = await findChromeWidevinePath();
+  if (!options.forceDownload) {
+    const sources = await findWidevineSources({ includeApps: Boolean(options.from) });
+    const candidates = options.from
+      ? sources.filter((s) => s.name.toLowerCase().includes(options.from!.toLowerCase()))
+      : sources;
 
-  if (!chromeWidevinePath) {
-    spinner.text = "Chrome not found. Downloading...";
-    logger.info("Chrome not found. Downloading...");
-    chromeWidevinePath = await downloadAndExtractChrome({
-      spinner,
-      logger,
-      forceDownload: options.forceDownload,
-    });
-    spinner.succeed(
-      chalk.green("Chrome downloaded and extracted successfully")
-    );
-  } else {
-    spinner.succeed(chalk.green(`Found Chrome at: ${chromeWidevinePath}`));
+    if (options.from && !candidates.length) {
+      const available = [...new Set(sources.map((s) => s.name))].join(", ") || "none";
+      throw new Error(`No Widevine found from "${options.from}". Available: ${available}`);
+    }
+
+    const best = candidates[0];
+    if (best) {
+      const others = sources.length - 1;
+      spinner.succeed(
+        chalk.green(`Using ${describe(best)}`) +
+          chalk.dim(others > 0 ? ` (${others} other cop${others === 1 ? "y" : "ies"} found)` : "")
+      );
+      logger.info(`Widevine source: ${best.path}`);
+      return best;
+    }
   }
 
-  return chromeWidevinePath;
+  spinner.text = "No Widevine found on this computer. Downloading Chrome...";
+  logger.info("No Widevine found. Downloading Chrome...");
+  const downloaded = await downloadAndExtractChrome({
+    spinner,
+    logger,
+    forceDownload: options.forceDownload,
+  });
+  const source = await readWidevine(downloaded, "Google Chrome (downloaded)");
+  if (!source) throw new Error("The downloaded Chrome has no usable Widevine");
+  spinner.succeed(chalk.green(`Using ${describe(source)}`));
+  return source;
+}
+
+/**
+ * --list-sources: print every Widevine copy found, best first.
+ */
+async function listSources(): Promise<void> {
+  const spinner = ora("Searching browsers and apps for Widevine...").start();
+  const sources = await findWidevineSources({ includeApps: true });
+  spinner.stop();
+
+  if (!sources.length) {
+    console.log(chalk.yellow("\nNo Widevine found. The fixer will download Chrome to get it.\n"));
+    return;
+  }
+
+  console.log(chalk.bold(`\nFound ${sources.length} Widevine cop${sources.length === 1 ? "y" : "ies"} (best first):\n`));
+  sources.forEach((source, i) => {
+    const marker = i === 0 ? chalk.green("→") : " ";
+    const layout = source.layout === "flat" ? chalk.dim(" [converted]") : "";
+    console.log(`${marker} ${chalk.bold(source.name.padEnd(40))} ${source.version.padEnd(14)}${layout}`);
+    console.log(chalk.dim(`    ${source.path}`));
+  });
+  console.log(chalk.dim('\nUse one with --from "<name>", e.g. --from edge\n'));
 }
 
 function exitHeliumNotFound(
@@ -88,7 +145,7 @@ async function getHeliumWidevinePath(
   logger: Logger,
   spinner: ReturnType<typeof ora>,
   options: FixHeliumDrmOptions,
-  chromeWidevinePath: string
+  widevine: WidevineSource
 ): Promise<string> {
   if (getPlatform() !== "linux") {
     const heliumVersionPath =
@@ -110,10 +167,7 @@ async function getHeliumWidevinePath(
     logger.info(`Helium found at ${install}, but no profile yet. Using ${userDataDir}`);
   }
 
-  const manifest = JSON.parse(
-    await readFile(join(chromeWidevinePath, "manifest.json"), "utf-8")
-  );
-  const version: string = manifest.version;
+  const version = widevine.version;
 
   spinner.succeed(chalk.green(`Found Helium profile at: ${userDataDir}`));
   const heliumWidevinePath = join(userDataDir, "WidevineCdm", version);
@@ -211,21 +265,22 @@ function explainCopyError(error: unknown): void {
 export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
   const logger = initLogger(options.verbose || false);
 
+  if (options.listSources) {
+    await listSources();
+    return;
+  }
+
   console.log(chalk.bold.cyan("\n🔧 Fixing Helium DRM...\n"));
 
-  const chromeSpinner = ora("Looking for Chrome installation...").start();
-  logger.info("Looking for Chrome installation...");
+  const widevineSpinner = ora("Looking for Widevine in your browsers...").start();
+  logger.info("Looking for Widevine...");
 
-  let chromeWidevinePath: string;
+  let widevine: WidevineSource;
   try {
-    chromeWidevinePath = await getChromeWidevinePath(
-      logger,
-      chromeSpinner,
-      options
-    );
+    widevine = await getWidevineSource(logger, widevineSpinner, options);
   } catch (error) {
-    chromeSpinner.fail(chalk.red("Failed to find/download Chrome"));
-    logger.error("Failed to find/download Chrome", { error });
+    widevineSpinner.fail(chalk.red("Failed to find or download Widevine"));
+    logger.error("Failed to find or download Widevine", { error });
     if (error instanceof Error) console.log(chalk.dim(`\n   ${error.message}\n`));
     process.exit(1);
   }
@@ -237,7 +292,7 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
     logger,
     heliumSpinner,
     options,
-    chromeWidevinePath
+    widevine
   );
 
   if (options.check) {
@@ -248,10 +303,10 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
 
   if (options.dryRun) {
     console.log(chalk.bold.yellow("\n🔍 Dry run - no changes made."));
-    console.log(chalk.dim(`   Would copy: ${chromeWidevinePath}`));
+    console.log(chalk.dim(`   Would copy: ${widevine.path} (${describe(widevine)})`));
     console.log(chalk.dim(`   To: ${heliumWidevinePath}\n`));
     logger.info("Dry run complete", {
-      source: chromeWidevinePath,
+      source: widevine.path,
       dest: heliumWidevinePath,
     });
     return;
@@ -259,13 +314,11 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
 
   const reopenCommand = await closeRunningHelium(heliumWidevinePath, options, logger);
 
-  const copySpinner = ora(
-    "Copying WidevineCdm from Chrome to Helium..."
-  ).start();
-  logger.info("Copying WidevineCdm from Chrome to Helium...");
+  const copySpinner = ora(`Copying WidevineCdm from ${widevine.name} to Helium...`).start();
+  logger.info(`Copying WidevineCdm from ${widevine.path} to Helium...`);
 
   try {
-    await copyDir(chromeWidevinePath, heliumWidevinePath);
+    await installWidevine(widevine, heliumWidevinePath);
 
     // On Linux, write the component updater hint file so Chromium finds the CDM
     if (getPlatform() === "linux") {
