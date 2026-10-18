@@ -15,7 +15,10 @@ program
   .option("--verbose", "Enable verbose logging")
   .option("--debug", "Enable debug logging (alias for --verbose)")
   .option("--chrome-path <path>", "Custom Chrome WidevineCdm path")
-  .option("--helium-path <path>", "Custom Helium WidevineCdm path")
+  .option(
+    "--helium-path <path>",
+    "Custom Helium version folder (Windows/macOS) or profile folder (Linux)"
+  )
   .option("--force-download", "Force re-download Chrome even if cached")
   .action(async (options) => {
     try {

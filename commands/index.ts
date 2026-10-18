@@ -1,4 +1,10 @@
-import { findChromeWidevinePath, findHeliumVersionPath, findHeliumUserDataDir, getPlatform } from "../lib/paths";
+import {
+  findChromeWidevinePath,
+  findHeliumVersionPath,
+  findHeliumUserDataDir,
+  getPlatform,
+  getSudoOwner,
+} from "../lib/paths";
 import { copyDir } from "../lib/utils";
 import { initLogger, type Logger } from "../lib/logger";
 import { downloadAndExtractChrome } from "../lib/chrome-downloader";
@@ -53,32 +59,86 @@ async function getChromeWidevinePath(
   return chromeWidevinePath;
 }
 
-async function getHeliumVersionPath(
+function exitHeliumNotFound(
+  spinner: ReturnType<typeof ora>,
+  logger: Logger
+): never {
+  spinner.fail(chalk.red("Helium browser not found"));
+  console.log(chalk.yellow("\n⚠️  Please install Helium first."));
+  console.log(chalk.blue("   Download from: https://helium.is/\n"));
+  logger.error("Helium browser not found. Please install Helium first.");
+  process.exit(1);
+}
+
+/**
+ * Where WidevineCdm goes. On Windows/macOS that is inside Helium's newest
+ * version folder; on Linux it is Helium's profile folder, laid out like
+ * Chromium's component updater: <profile>/WidevineCdm/<cdm version>/
+ */
+async function getHeliumWidevinePath(
   logger: Logger,
   spinner: ReturnType<typeof ora>,
-  options: FixHeliumDrmOptions
+  options: FixHeliumDrmOptions,
+  chromeWidevinePath: string
 ): Promise<string> {
-  if (options.heliumPath) {
-    logger.info(`Using custom Helium path: ${options.heliumPath}`);
-    spinner.succeed(
-      chalk.green(`Using custom Helium path: ${options.heliumPath}`)
-    );
-    return options.heliumPath;
+  if (getPlatform() !== "linux") {
+    const heliumVersionPath =
+      options.heliumPath ?? (await findHeliumVersionPath());
+    if (!heliumVersionPath) exitHeliumNotFound(spinner, logger);
+
+    spinner.succeed(chalk.green(`Found Helium at: ${heliumVersionPath}`));
+    logger.info(`Found Helium at: ${heliumVersionPath}`);
+    return join(heliumVersionPath, "WidevineCdm");
   }
 
-  const heliumVersionPath = await findHeliumVersionPath();
-
-  if (!heliumVersionPath) {
-    spinner.fail(chalk.red("Helium browser not found"));
-    console.log(chalk.yellow("\n⚠️  Please install Helium first."));
-    console.log(chalk.blue("   Download from: https://helium.is/\n"));
-    logger.error("Helium browser not found. Please install Helium first.");
+  const userDataDir = options.heliumPath ?? (await findHeliumUserDataDir());
+  if (!userDataDir) {
+    spinner.fail(chalk.red("Could not find the Helium profile folder"));
+    console.log(
+      chalk.yellow(
+        "\n⚠️  Install Helium and launch it at least once, then run this tool again."
+      )
+    );
+    console.log(
+      chalk.dim(
+        "   Or pass the profile folder: --helium-path ~/.config/net.imput.helium\n"
+      )
+    );
+    logger.error("Helium user data directory not found");
     process.exit(1);
   }
 
-  spinner.succeed(chalk.green(`Found Helium at: ${heliumVersionPath}`));
-  logger.info(`Found Helium at: ${heliumVersionPath}`);
-  return heliumVersionPath;
+  const manifest = JSON.parse(
+    await readFile(join(chromeWidevinePath, "manifest.json"), "utf-8")
+  );
+  const version: string = manifest.version;
+
+  spinner.succeed(chalk.green(`Found Helium profile at: ${userDataDir}`));
+  const heliumWidevinePath = join(userDataDir, "WidevineCdm", version);
+  logger.info(`Using Linux component updater path: ${heliumWidevinePath}`);
+  return heliumWidevinePath;
+}
+
+function explainCopyError(error: unknown): void {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  if (code === "EBUSY" || (getPlatform() === "win32" && code === "EPERM")) {
+    console.log(
+      chalk.yellow("\n⚠️  WidevineCdm is in use. Close Helium completely and try again.")
+    );
+    if (getPlatform() === "win32") {
+      console.log(
+        chalk.dim(
+          "   If Helium is installed for all users (Program Files), run this from an Administrator terminal.\n"
+        )
+      );
+    }
+  } else if (code === "EACCES" || code === "EPERM") {
+    console.log(
+      chalk.yellow("\n⚠️  Permission denied. Run again with sudo, or check folder permissions.\n")
+    );
+  } else if (error instanceof Error) {
+    console.log(chalk.dim(`\n   ${error.message}\n`));
+  }
 }
 
 export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
@@ -99,40 +159,19 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
   } catch (error) {
     chromeSpinner.fail(chalk.red("Failed to find/download Chrome"));
     logger.error("Failed to find/download Chrome", { error });
+    if (error instanceof Error) console.log(chalk.dim(`\n   ${error.message}\n`));
     process.exit(1);
   }
 
   const heliumSpinner = ora("Looking for Helium installation...").start();
   logger.info("Looking for Helium installation...");
 
-  const heliumVersionPath = await getHeliumVersionPath(
+  const heliumWidevinePath = await getHeliumWidevinePath(
     logger,
     heliumSpinner,
-    options
+    options,
+    chromeWidevinePath
   );
-
-  let heliumWidevinePath: string;
-
-  if (getPlatform() === "linux") {
-    // On Linux, Chromium loads WidevineCdm from the user data directory
-    // using the component updater format: <user-data>/WidevineCdm/<version>/
-    const manifest = JSON.parse(
-      await readFile(join(chromeWidevinePath, "manifest.json"), "utf-8")
-    );
-    const version: string = manifest.version;
-    const userDataDir = await findHeliumUserDataDir();
-
-    if (!userDataDir) {
-      console.log(chalk.red("\n✗ Could not find Helium user data directory."));
-      console.log(chalk.yellow("  Please launch Helium at least once before running this tool.\n"));
-      process.exit(1);
-    }
-
-    heliumWidevinePath = join(userDataDir, "WidevineCdm", version);
-    logger.info(`Using Linux component updater path: ${heliumWidevinePath}`);
-  } else {
-    heliumWidevinePath = join(heliumVersionPath, "WidevineCdm");
-  }
 
   if (options.check) {
     console.log(chalk.bold.green("\n✅ Check complete. Fix can be applied.\n"));
@@ -161,9 +200,17 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
 
     // On Linux, write the component updater hint file so Chromium finds the CDM
     if (getPlatform() === "linux") {
-      const hintFile = join(dirname(heliumWidevinePath), "latest-component-updated-widevine-cdm");
+      const widevineRoot = dirname(heliumWidevinePath);
+      const hintFile = join(widevineRoot, "latest-component-updated-widevine-cdm");
       await writeFile(hintFile, JSON.stringify({ Path: heliumWidevinePath }));
       logger.info(`Wrote hint file: ${hintFile}`);
+
+      // Under sudo, give the files back to the user so Helium can read them
+      const owner = getSudoOwner();
+      if (owner) {
+        await execFileAsync("chown", ["-R", `${owner.uid}:${owner.gid}`, widevineRoot]);
+        logger.info(`Changed owner of ${widevineRoot} to ${owner.uid}:${owner.gid}`);
+      }
     }
 
     copySpinner.succeed(chalk.green("WidevineCdm copied successfully!"));
@@ -171,6 +218,7 @@ export async function fixHeliumDrm(options: FixHeliumDrmOptions = {}) {
   } catch (error) {
     copySpinner.fail(chalk.red("Failed to copy WidevineCdm"));
     logger.error("Failed to copy WidevineCdm", { error });
+    explainCopyError(error);
     process.exit(1);
   }
 
