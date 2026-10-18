@@ -15,6 +15,7 @@ import { $ } from "bun";
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { writePackaging } from "./packaging";
 
 const REPO = "OctavianAdv/helium-drm-fixer";
 const API = `https://api.github.com/repos/${REPO}`;
@@ -117,6 +118,12 @@ async function releaseNotes(tag: string): Promise<string> {
     "",
     "```bash",
     `curl -fsSL ${raw}/install.sh | bash`,
+    "```",
+    "",
+    "**Scoop** (Windows):",
+    "",
+    "```powershell",
+    `scoop install https://raw.githubusercontent.com/${REPO}/main/packaging/scoop/helium-drm-fixer.json`,
     "```",
     "",
     "Or download the file for your system:",
@@ -233,8 +240,17 @@ async function main() {
     throw error;
   }
 
-  if (version !== pkg.version) {
-    await $`git add package.json`;
+  step("Updating Scoop, winget and AUR manifests");
+  const sums = Object.fromEntries(
+    (await Bun.file(join(DIST, "SHA256SUMS.txt")).text())
+      .trim()
+      .split("\n")
+      .map((line) => line.split(/\s+/).reverse() as [string, string])
+  );
+  await writePackaging(".", version, sums);
+
+  await $`git add package.json packaging`;
+  if ((await $`git diff --cached --quiet`.nothrow()).exitCode !== 0) {
     await $`git commit --quiet -m ${`chore: Release ${tag}`}`;
   }
 
