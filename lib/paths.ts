@@ -345,8 +345,9 @@ async function subDirs(dir: string): Promise<string[]> {
  * Windows: find Helium from its usual install folders, the registry, a
  * running Helium window, or a portable copy - in that order.
  */
-async function findHeliumWindows(): Promise<string | null> {
+export async function findHeliumWindowsAll(stopAtFirst = false): Promise<string[]> {
   const log = getLogger();
+  const found: string[] = [];
 
   const sources: Array<[string, () => Promise<string[]>]> = [
     ["install folders", async () => windowsProgramDirs("imput", "Helium", "Application")],
@@ -370,14 +371,19 @@ async function findHeliumWindows(): Promise<string | null> {
 
       log.info(`Checking Helium folder: ${appDir}`);
       const moduleDir = await findHeliumModuleDir(appDir);
-      if (moduleDir) {
+      if (moduleDir && !found.includes(moduleDir)) {
         log.info(`✓ Found Helium at: ${moduleDir}`);
-        return moduleDir;
+        found.push(moduleDir);
+        if (stopAtFirst) return found;
       }
     }
   }
 
-  return null;
+  return found;
+}
+
+async function findHeliumWindows(): Promise<string | null> {
+  return (await findHeliumWindowsAll(true))[0] ?? null;
 }
 
 /**
@@ -452,7 +458,15 @@ export function getDefaultHeliumUserDataDir(): string {
  * layout, which works for every install type (AppImage, tarball, distro package).
  */
 export async function findHeliumUserDataDir(): Promise<string | null> {
+  return (await findHeliumUserDataDirs())[0] ?? null;
+}
+
+/**
+ * Every Helium profile folder on Linux (normally just one).
+ */
+export async function findHeliumUserDataDirs(): Promise<string[]> {
   const log = getLogger();
+  const found: string[] = [];
   const home = getUserHome();
   const configHome =
     (home === homedir() && process.env.XDG_CONFIG_HOME) || join(home, ".config");
@@ -467,12 +481,13 @@ export async function findHeliumUserDataDir(): Promise<string | null> {
     log.info(`Checking Helium user data dir: ${dir}`);
     if (await isDirectory(dir)) {
       log.info(`✓ Found Helium user data dir: ${dir}`);
-      return dir;
+      found.push(dir);
+    } else {
+      log.info(`✗ Path does not exist: ${dir}`);
     }
-    log.info(`✗ Path does not exist: ${dir}`);
   }
 
-  return null;
+  return found;
 }
 
 /**

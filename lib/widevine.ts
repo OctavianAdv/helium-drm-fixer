@@ -96,7 +96,11 @@ export async function findWidevineLibrary(dir: string): Promise<string | null> {
  * Read a Widevine folder. Returns null unless it has a manifest with a
  * version and a CDM library for this OS and CPU.
  */
-export async function readWidevine(dir: string, name: string): Promise<WidevineSource | null> {
+export async function readWidevine(
+  dir: string,
+  name: string,
+  targetArch: "x64" | "arm64" = getArch()
+): Promise<WidevineSource | null> {
   let manifest: { version?: string };
   try {
     manifest = JSON.parse(await readFile(join(dir, "manifest.json"), "utf-8"));
@@ -109,8 +113,8 @@ export async function readWidevine(dir: string, name: string): Promise<WidevineS
   if (!library) return null;
 
   const arch = await detectLibraryArch(library);
-  if (arch && arch !== getArch()) {
-    getLogger().info(`✗ Skipping ${dir}: built for ${arch}, this system is ${getArch()}`);
+  if (arch && arch !== targetArch) {
+    getLogger().info(`✗ Skipping ${dir}: built for ${arch}, Helium is ${targetArch}`);
     return null;
   }
 
@@ -363,7 +367,12 @@ function isHeliumPath(path: string): boolean {
   return /helium|net\.imput/i.test(path);
 }
 
-async function collect(locations: Location[], sources: WidevineSource[], seen: Set<string>) {
+async function collect(
+  locations: Location[],
+  sources: WidevineSource[],
+  seen: Set<string>,
+  arch: "x64" | "arm64"
+) {
   const log = getLogger();
   for (const [name, find] of locations) {
     for (const dir of await find()) {
@@ -377,7 +386,7 @@ async function collect(locations: Location[], sources: WidevineSource[], seen: S
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const source = await readWidevine(dir, name);
+      const source = await readWidevine(dir, name, arch);
       if (source) {
         log.info(`✓ Widevine ${source.version} from ${name}: ${dir}`);
         sources.push(source);
@@ -390,19 +399,22 @@ async function collect(locations: Location[], sources: WidevineSource[], seen: S
  * Every usable Widevine copy on this machine, best first: newest version,
  * then browsers in the order listed (Chrome first).
  */
-export async function findWidevineSources(options: { includeApps?: boolean } = {}): Promise<WidevineSource[]> {
+export async function findWidevineSources(
+  options: { includeApps?: boolean; arch?: "x64" | "arm64" } = {}
+): Promise<WidevineSource[]> {
+  const arch = options.arch ?? getArch();
   const sources: WidevineSource[] = [];
   const seen = new Set<string>();
 
   if (getPlatform() === "darwin") {
     const chrome = await findChromeWidevinePath();
-    const source = chrome ? await readWidevine(chrome, "Google Chrome") : null;
+    const source = chrome ? await readWidevine(chrome, "Google Chrome", arch) : null;
     return source ? [source] : [];
   }
 
-  await collect(getPlatform() === "win32" ? windowsLocations() : linuxLocations(), sources, seen);
+  await collect(getPlatform() === "win32" ? windowsLocations() : linuxLocations(), sources, seen, arch);
   if (options.includeApps || sources.length === 0) {
-    await collect(await appLocations(), sources, seen);
+    await collect(await appLocations(), sources, seen, arch);
   }
 
   // Array.sort is stable, so equal versions keep the browser order above
