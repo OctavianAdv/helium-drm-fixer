@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
+import { t } from "./i18n";
 
 /**
  * Leaving the program: commands throw ExitSignal instead of calling
@@ -46,5 +47,5 @@ export async function ask(question: string): Promise<string> {
 }
 
 export async function pressEnterToClose(): Promise<void> {
-  await ask(chalk.dim("Press Enter to close this window..."));
+  await ask(chalk.dim(t("pressEnter")));
 }

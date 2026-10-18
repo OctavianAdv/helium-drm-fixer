@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { fixHeliumDrm } from "./commands/index";
 import { ExitSignal, pressEnterToClose, startedByDoubleClick } from "./lib/console";
 import { checkForUpdate } from "./lib/update-check";
+import { detectLanguage, setLanguage, t, LANGUAGES } from "./lib/i18n";
 import pkg from "./package.json" with { type: "json" };
 
 const program = new Command();
@@ -34,11 +35,14 @@ program
   .option("--undo", "Remove the fix from Helium")
   .option("--auto [on|off]", "Re-apply the fix automatically after Helium updates (Windows, macOS)")
   .option("--auto-run", "(used by --auto's scheduled task)")
+  .option("--lang <code>", `Language: ${Object.keys(LANGUAGES).join(", ")} (default: your system language)`)
+  .option("--json", "With --status or --list-sources: print JSON")
   .option("--verbose", "Show every location checked and every decision made")
   .option("--debug", "Same as --verbose")
   .action(async (options) => {
+    setLanguage(detectLanguage(options.lang));
     const doubleClicked = startedByDoubleClick();
-    const update = options.autoRun ? Promise.resolve(null) : checkForUpdate(pkg.version);
+    const update = options.autoRun || options.json ? Promise.resolve(null) : checkForUpdate(pkg.version);
     let code = 0;
 
     try {
@@ -62,6 +66,7 @@ program
           latest: options.latest,
           offline: options.offline,
           reinstall: options.reinstall,
+          json: options.json,
         },
         pkg.version
       );
@@ -76,8 +81,8 @@ program
 
     const newer = await update;
     if (newer) {
-      console.log(chalk.yellow(`⬆️  Helium DRM Fixer v${newer} is available (you have v${pkg.version}).`));
-      console.log(chalk.dim("   Get it: https://github.com/OctavianAdv/helium-drm-fixer#-quick-start\n"));
+      console.log(chalk.yellow(t("updateAvailable", { latest: newer, current: pkg.version })));
+      console.log(chalk.dim(`   ${t("getIt", { url: "https://github.com/OctavianAdv/helium-drm-fixer#-quick-start" })}\n`));
     }
 
     if (doubleClicked) await pressEnterToClose();

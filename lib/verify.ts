@@ -6,6 +6,7 @@ import { getPlatform } from "./paths";
 import { installedWidevine, type HeliumInstall } from "./helium";
 import { installWidevine } from "./widevine";
 import { getLogger } from "./logger";
+import { t } from "./i18n";
 
 /**
  * Prove the fix works: start Helium invisibly with a throw-away profile,
@@ -89,7 +90,7 @@ async function removeWithRetry(dir: string): Promise<void> {
 export async function verifyWidevine(install: HeliumInstall): Promise<VerifyResult> {
   const log = getLogger();
   if (!install.executable) {
-    return { ok: false, message: "Couldn't find Helium's program file to start it" };
+    return { ok: false, message: t("noExecutable") };
   }
 
   const profile = await mkdtemp(join(tmpdir(), "helium-drm-verify-"));
@@ -104,7 +105,7 @@ export async function verifyWidevine(install: HeliumInstall): Promise<VerifyResu
     // On Linux, Widevine lives in the profile - give the test profile a copy
     if (getPlatform() === "linux") {
       const current = await installedWidevine(install);
-      if (!current) return { ok: false, message: "No Widevine installed in this Helium profile" };
+      if (!current) return { ok: false, message: t("noWidevineInProfile") };
       const dest = join(profile, "WidevineCdm", current.version);
       await installWidevine(current, dest);
       await writeFile(join(profile, "WidevineCdm", "latest-component-updated-widevine-cdm"), JSON.stringify({ Path: dest }));
@@ -134,8 +135,8 @@ export async function verifyWidevine(install: HeliumInstall): Promise<VerifyResu
     const answer = await evaluate(page.webSocketDebuggerUrl, PROBE, 15000);
     log.info(`Helium answered: ${answer}`);
     return answer.startsWith("ok:")
-      ? { ok: true, message: "Helium confirms Widevine DRM is available" }
-      : { ok: false, message: `Helium says: ${answer.replace(/^error:/, "")}` };
+      ? { ok: true, message: t("verifyOk") }
+      : { ok: false, message: t("heliumSays", { message: answer.replace(/^error:/, "") }) };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) };
   } finally {
